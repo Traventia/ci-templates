@@ -50,4 +50,5 @@ runs:
         IS_BC: ${{ inputs.is_bc }}
         NOPUSH: 1
       run: |
+        make build-ci
         bash ci/scripts/build_and_ecr_push_images.sh ${{ inputs.apps }}

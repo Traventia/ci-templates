@@ -49,4 +49,5 @@ runs:
         NPM_TOKEN: ${{ inputs.npm_token }}
         IS_BC: ${{ inputs.is_bc }}
       run: |
+        make build-ci
         bash ci/scripts/build_and_ecr_push_images.sh ${{ inputs.apps }}
