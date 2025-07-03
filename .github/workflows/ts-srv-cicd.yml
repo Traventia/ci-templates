@@ -1,52 +1,52 @@
-name: 'TypeScript Services CI/CD'
+name: "TypeScript Services CI/CD"
 
 on:
   workflow_call:
     inputs:
       environment:
-        description: 'Environment to deploy (production or staging)'
+        description: "Environment to deploy (production or staging)"
         required: false
         type: string
-        default: 'production'
+        default: "production"
       apps:
-        description: 'Comma-separated list of apps to deploy. If not provided, app identification will be used'
+        description: "Comma-separated list of apps to deploy. If not provided, app identification will be used"
         required: false
         type: string
       eks_namespace:
-        description: 'EKS namespace for deployment'
+        description: "EKS namespace for deployment"
         required: false
         type: string
-        default: 'default'
+        default: "default"
       skip_tests:
-        description: 'Skip test execution'
+        description: "Skip test execution"
         required: false
         type: boolean
         default: false
       skip_integration_tests:
-        description: 'Skip integration test execution'
+        description: "Skip integration test execution"
         required: false
         type: boolean
         default: false
       skip_build:
-        description: 'Skip build step'
+        description: "Skip build step"
         required: false
         type: boolean
         default: false
       skip_deploy:
-        description: 'Skip deploy step'
+        description: "Skip deploy step"
         required: false
         type: boolean
         default: false
       node_version:
-        description: 'Node.js version to use'
+        description: "Node.js version to use"
         required: false
         type: string
-        default: '20.x'
+        default: "20.x"
       is_bc:
-        description: 'Whether this is a BC build/deploy (1 for true, 0 for false)'
+        description: "Whether this is a BC build/deploy (1 for true, 0 for false)"
         required: false
         type: string
-        default: '0'
+        default: "0"
     secrets:
       AWS_ACCESS_KEY_ID:
         required: true
@@ -68,7 +68,7 @@ on:
         required: false
     outputs:
       apps_to_deploy:
-        description: 'Comma-separated list of applications that will be deployed'
+        description: "Comma-separated list of applications that will be deployed"
         value: ${{ jobs.identify-apps.outputs.apps || inputs.apps }}
 
 jobs:
@@ -98,7 +98,7 @@ jobs:
     if: ${{ !inputs.skip_tests && !cancelled() && !failure() }}
     strategy:
       matrix:
-        node-version: [${{ inputs.node_version }}]
+        node-version: ["${{ inputs.node_version }}"]
     steps:
       - uses: actions/checkout@v3
         with:
@@ -134,7 +134,7 @@ jobs:
     if: ${{ !inputs.skip_integration_tests && !cancelled() && !failure() }}
     strategy:
       matrix:
-        node-version: [${{ inputs.node_version }}]
+        node-version: ["${{ inputs.node_version }}"]
     steps:
       - uses: actions/checkout@v3
         with:
