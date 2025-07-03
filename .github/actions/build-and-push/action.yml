@@ -1,0 +1,53 @@
+name: "Build and Push Docker Images"
+description: "Builds and pushes Docker images for specified applications"
+inputs:
+  apps:
+    description: "Comma-separated list of applications to build"
+    required: true
+  ecr_registry:
+    description: "ECR registry URL"
+    required: true
+  image_tag:
+    description: "Docker image tag"
+    required: true
+  npm_token:
+    description: "NPM authentication token"
+    required: false
+  aws-access-key-id:
+    description: "AWS Access Key ID"
+    required: true
+  aws-secret-access-key:
+    description: "AWS Secret Access Key"
+    required: true
+  aws-region:
+    description: "AWS Region where the S3 bucket is located"
+    required: false
+    default: "eu-west-1"
+  s3-bucket:
+    description: "S3 bucket name containing the ci-scripts.zip file"
+    required: true
+  is_bc:
+    description: "Whether this is a BC build (1 for true, 0 for false)"
+    required: false
+    default: "0"
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout CI Scripts
+      uses: Traventia/ci-templates/.github/actions/checkout-ci-scripts@main
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
+        s3-bucket: ${{ inputs.s3-bucket }}
+
+    - name: Build and push images
+      shell: bash
+      working-directory: ci/scripts
+      env:
+        ECR_REGISTRY: ${{ inputs.ecr_registry }}
+        IMAGE_TAG: ${{ inputs.image_tag }}
+        NPM_TOKEN: ${{ inputs.npm_token }}
+        IS_BC: ${{ inputs.is_bc }}
+      run: |
+        bash build_and_ecr_push_images.sh ${{ inputs.apps }}
