@@ -42,6 +42,11 @@ on:
         required: false
         type: string
         default: '20.x'
+      is_bc:
+        description: 'Whether this is a BC build/deploy (1 for true, 0 for false)'
+        required: false
+        type: string
+        default: '0'
     secrets:
       AWS_ACCESS_KEY_ID:
         required: true
@@ -196,6 +201,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
           s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+          is_bc: ${{ inputs.is_bc }}
 
   deploy:
     runs-on: ubuntu-latest
@@ -233,3 +239,4 @@ jobs:
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
           s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
           deploy_env: ${{ inputs.environment }}
+          is_bc: ${{ inputs.is_bc }}

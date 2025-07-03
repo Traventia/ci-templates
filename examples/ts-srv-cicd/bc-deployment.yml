@@ -1,0 +1,63 @@
+name: "TypeScript Services CI/CD - BC Deployment"
+
+# This example shows how to use the BC (Backward Compatibility) flag
+# Useful for special builds that need different handling in scripts
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      bc_mode:
+        description: "Enable BC (Backward Compatibility) mode"
+        required: false
+        type: boolean
+        default: false
+      apps:
+        description: "Specific apps to deploy (comma-separated)"
+        required: false
+        type: string
+
+jobs:
+  bc-deployment:
+    uses: Traventia/ci-templates/.github/workflows/ts-srv-cicd.yml@main
+    with:
+      environment: ${{ github.event.inputs.environment }}
+      apps: ${{ github.event.inputs.apps }}
+      eks_namespace: ${{ github.event.inputs.environment }}
+      is_bc: ${{ github.event.inputs.bc_mode == 'true' && '1' || '0' }} # Convert boolean to string
+      node_version: "20.x"
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_CI_BUCKET_REGION: ${{ secrets.AWS_CI_BUCKET_REGION }}
+      AWS_CI_BUCKET: ${{ secrets.AWS_CI_BUCKET }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+      EKS_I2_USER_TOKEN: ${{ secrets.EKS_I2_USER_TOKEN }}
+      EKS_I2_CA: ${{ secrets.EKS_I2_CA }}
+      EKS_I2_URL: ${{ secrets.EKS_I2_URL }}
+      EKS_I2_USER_NAME: ${{ secrets.EKS_I2_USER_NAME }}
+
+  # Alternative: BC deployment with hardcoded BC flag
+  bc-deployment-hardcoded:
+    if: false # Disabled by default, enable if needed
+    uses: Traventia/ci-templates/.github/workflows/ts-srv-cicd.yml@main
+    with:
+      environment: "staging"
+      is_bc: "1" # Force BC mode
+      skip_integration_tests: true # BC builds might skip some tests
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_CI_BUCKET_REGION: ${{ secrets.AWS_CI_BUCKET_REGION }}
+      AWS_CI_BUCKET: ${{ secrets.AWS_CI_BUCKET }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+      EKS_I2_USER_TOKEN: ${{ secrets.EKS_I2_USER_TOKEN }}
+      EKS_I2_CA: ${{ secrets.EKS_I2_CA }}
+      EKS_I2_URL: ${{ secrets.EKS_I2_URL }}
+      EKS_I2_USER_NAME: ${{ secrets.EKS_I2_USER_NAME }}
