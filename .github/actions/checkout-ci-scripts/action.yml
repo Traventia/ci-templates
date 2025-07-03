@@ -63,7 +63,9 @@ runs:
     - name: Create ci directory
       shell: bash
       run: |
-        mkdir -p ci    - name: Download and extract ci-scripts (if not cached)
+        mkdir -p ci
+
+    - name: Download and extract ci-scripts (if not cached)
       if: steps.cache-scripts.outputs.cache-hit != 'true'
       shell: bash
       run: |
@@ -97,7 +99,9 @@ runs:
         echo "Hash used: ${{ steps.remote-hash.outputs.hash }}"
         echo "Contents of cached ci/scripts:"
         ls -la ci/scripts/
-        echo "✅ Cache verification completed"    - name: Set execute permissions
+        echo "✅ Cache verification completed"
+
+    - name: Set execute permissions
       shell: bash
       run: |
         echo "🔧 Setting execute permissions for shell scripts"
