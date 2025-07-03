@@ -1,0 +1,98 @@
+name: "Deploy to Kubernetes"
+description: "Deploys applications to Kubernetes cluster"
+inputs:
+  apps:
+    description: "Comma-separated list of applications to deploy"
+    required: true
+  ecr_registry:
+    description: "ECR registry URL"
+    required: true
+  image_tag:
+    description: "Docker image tag"
+    required: true
+  k8s_user_token:
+    description: "Kubernetes user token"
+    required: true
+  k8s_ca:
+    description: "Kubernetes CA certificate"
+    required: true
+  k8s_server_url:
+    description: "Kubernetes server URL"
+    required: true
+  k8s_user_name:
+    description: "Kubernetes user name"
+    required: true
+  k8s_namespace:
+    description: "Kubernetes namespace"
+    required: true
+  aws-access-key-id:
+    description: "AWS Access Key ID"
+    required: true
+  aws-secret-access-key:
+    description: "AWS Secret Access Key"
+    required: true
+  aws-region:
+    description: "AWS Region where the S3 bucket is located"
+    required: false
+    default: "eu-west-1"
+  s3-bucket:
+    description: "S3 bucket name containing the ci-scripts.zip file"
+    required: true
+  deploy_env:
+    description: "Deployment environment"
+    required: false
+    default: "production"
+  is_bc:
+    description: "Whether this is a BC deployment (1 for true, 0 for false)"
+    required: false
+    default: "0"
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout CI Scripts
+      uses: Traventia/ci-templates/.github/actions/checkout-ci-scripts@main
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
+        s3-bucket: ${{ inputs.s3-bucket }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: "18"
+
+    - name: Install kubectl
+      shell: bash
+      run: |
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/
+
+    - name: Deploy to cluster
+      shell: bash
+      working-directory: ci/scripts
+      env:
+        ECR_REGISTRY: ${{ inputs.ecr_registry }}
+        IMAGE_TAG: ${{ inputs.image_tag }}
+        K8S_USER_TOKEN: ${{ inputs.k8s_user_token }}
+        K8S_I2_CA: ${{ inputs.k8s_ca }}
+        K8S_SERVER_URL: ${{ inputs.k8s_server_url }}
+        K8S_CLUSTER_NAME: "eks-i2"
+        K8S_USER_NAME: ${{ inputs.k8s_user_name }}
+        K8S_NS: ${{ inputs.k8s_namespace }}
+        DEPLOY_ENV: ${{ inputs.deploy_env }}
+        IS_BC: ${{ inputs.is_bc }}
+        USER_CHANGE: ${{ github.actor }}
+        GITHUB_CONTEXT: ${{ toJson(github) }}
+      run: |
+        echo "Starting deployment process..."
+        bash deploy_apps.sh ${{ inputs.apps }}
+
+        if [ $? -eq 0 ]; then
+          echo "Deployment successful, sending notifications..."
+          bash notify_deploy.sh ${{ inputs.apps }}
+        else
+          echo "Deployment failed, skipping notifications"
+          exit 1
+        fi
