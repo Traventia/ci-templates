@@ -1,0 +1,55 @@
+name: "TypeScript Services CI - Advanced Usage"
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  schedule:
+    # Run daily at 2 AM UTC for nightly builds
+    - cron: "0 2 * * *"
+
+jobs:
+  # Different configurations based on branch
+  ci-staging:
+    if: github.ref_name == 'develop' || github.event_name == 'pull_request'
+    uses: Traventia/ci-templates/.github/workflows/ts-srv-ci.yml@main
+    with:
+      environment: "staging"
+      node_version: "20.x"
+      skip_integration_tests: false # Run all tests for staging
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_CI_BUCKET_REGION: ${{ secrets.AWS_CI_BUCKET_REGION }}
+      AWS_CI_BUCKET: ${{ secrets.AWS_CI_BUCKET }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+
+  ci-production:
+    if: github.ref_name == 'main' && github.event_name == 'push'
+    uses: Traventia/ci-templates/.github/workflows/ts-srv-ci.yml@main
+    with:
+      environment: "production"
+      node_version: "20.x"
+      skip_integration_tests: false # Full testing for production builds
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_CI_BUCKET_REGION: ${{ secrets.AWS_CI_BUCKET_REGION }}
+      AWS_CI_BUCKET: ${{ secrets.AWS_CI_BUCKET }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+
+  # Nightly build with minimal testing
+  nightly-build:
+    if: github.event_name == 'schedule'
+    uses: Traventia/ci-templates/.github/workflows/ts-srv-ci.yml@main
+    with:
+      environment: "staging"
+      skip_tests: true # Skip tests for nightly builds
+      skip_integration_tests: true # Focus only on build validation
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_CI_BUCKET_REGION: ${{ secrets.AWS_CI_BUCKET_REGION }}
+      AWS_CI_BUCKET: ${{ secrets.AWS_CI_BUCKET }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}

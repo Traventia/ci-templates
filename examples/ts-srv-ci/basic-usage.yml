@@ -1,0 +1,19 @@
+name: "TypeScript Services CI - Basic Usage"
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+jobs:
+  ci:
+    uses: Traventia/ci-templates/.github/workflows/ts-srv-ci.yml@main
+    with:
+      environment: "staging"
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_CI_BUCKET_REGION: ${{ secrets.AWS_CI_BUCKET_REGION }}
+      AWS_CI_BUCKET: ${{ secrets.AWS_CI_BUCKET }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}

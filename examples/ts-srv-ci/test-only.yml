@@ -1,0 +1,19 @@
+name: "TypeScript Services CI - Test Only"
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test-only:
+    uses: Traventia/ci-templates/.github/workflows/ts-srv-ci.yml@main
+    with:
+      environment: "staging"
+      skip_build: true # Skip the build step, only run tests
+      node_version: "18.x"
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_CI_BUCKET_REGION: ${{ secrets.AWS_CI_BUCKET_REGION }}
+      AWS_CI_BUCKET: ${{ secrets.AWS_CI_BUCKET }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
