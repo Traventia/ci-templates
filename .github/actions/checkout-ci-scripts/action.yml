@@ -1,0 +1,112 @@
+name: "Checkout CI Scripts"
+description: "Downloads and extracts ci-scripts.zip from S3 to ci/scripts directory"
+author: "Traventia"
+
+inputs:
+  aws-access-key-id:
+    description: "AWS Access Key ID"
+    required: true
+  aws-secret-access-key:
+    description: "AWS Secret Access Key"
+    required: true
+  aws-region:
+    description: "AWS Region where the S3 bucket is located"
+    required: true
+  s3-bucket:
+    description: "S3 bucket name containing the ci-scripts.zip file"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Get remote content hash from S3 metadata
+      id: remote-hash
+      shell: bash
+      run: |
+        echo "Fetching remote content hash from S3 object metadata (HEAD request)..."
+        
+        # Usar HEAD request para obtener solo la metadata, mucho más rápido que GET
+        if REMOTE_HASH=$(aws s3api head-object \
+          --bucket ${{ inputs.s3-bucket }} \
+          --key ci-scripts.zip \
+          --query 'Metadata."content-hash"' \
+          --output text 2>/dev/null); then
+          
+          if [ "$REMOTE_HASH" != "None" ] && [ -n "$REMOTE_HASH" ]; then
+            echo "✅ Remote hash found: $REMOTE_HASH"
+            echo "hash=$REMOTE_HASH" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  No content-hash metadata found, cache will be bypassed"
+            echo "hash=no-metadata-$(date +%s)" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "⚠️  Could not fetch S3 object metadata, cache will be bypassed"
+          echo "hash=no-access-$(date +%s)" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Cache CI scripts
+      id: cache-scripts
+      uses: actions/cache@v3
+      with:
+        path: ci/scripts
+        key: ci-scripts-${{ steps.remote-hash.outputs.hash }}
+        restore-keys: |
+          ci-scripts-
+
+    - name: Create ci directory
+      shell: bash
+      run: |
+        mkdir -p ci    - name: Download and extract ci-scripts (if not cached)
+      if: steps.cache-scripts.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        echo "🔄 Cache miss - downloading ci-scripts.zip from S3 bucket: ${{ inputs.s3-bucket }}"
+        aws s3 cp s3://${{ inputs.s3-bucket }}/ci-scripts.zip ./ci-scripts.zip
+        echo "📥 File downloaded successfully"
+        
+        echo "📦 Extracting ci-scripts.zip to ci/ directory"
+        unzip -q ci-scripts.zip -d ci/
+        echo "✅ Extraction completed"
+
+        # Verify the extraction
+        if [ -d "ci/scripts" ]; then
+          echo "✅ ci/scripts directory created successfully"
+          echo "Contents of ci/scripts:"
+          ls -la ci/scripts/
+        else
+          echo "❌ Error: ci/scripts directory not found after extraction"
+          exit 1
+        fi
+        
+        echo "🗑️  Cleaning up downloaded zip file"
+        rm -f ci-scripts.zip
+        echo "✅ Download and extraction completed"
+
+    - name: Verify cached scripts (if cache hit)
+      if: steps.cache-scripts.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        echo "⚡ Cache hit - using cached ci-scripts"
+        echo "Hash used: ${{ steps.remote-hash.outputs.hash }}"
+        echo "Contents of cached ci/scripts:"
+        ls -la ci/scripts/
+        echo "✅ Cache verification completed"    - name: Set execute permissions
+      shell: bash
+      run: |
+        echo "🔧 Setting execute permissions for shell scripts"
+        find ci/scripts -name "*.sh" -type f -exec chmod +x {} \;
+        echo "✅ Execute permissions set for all .sh files"
+        
+        # Mostrar resumen final con performance info
+        if [ "${{ steps.cache-scripts.outputs.cache-hit }}" == "true" ]; then
+          echo "🚀 CI Scripts ready (from cache) - Hash: ${{ steps.remote-hash.outputs.hash }}"
+        else
+          echo "🚀 CI Scripts ready (downloaded and cached) - Hash: ${{ steps.remote-hash.outputs.hash }}"
+        fi
