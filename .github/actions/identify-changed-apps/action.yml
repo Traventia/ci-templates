@@ -1,0 +1,48 @@
+name: "Identify Changed Apps"
+description: "Identifies which applications have changed based on git diff and deployment history"
+inputs:
+  environment:
+    description: "Environment to check (production or staging)"
+    required: false
+    default: "production"
+  aws-access-key-id:
+    description: "AWS Access Key ID"
+    required: true
+  aws-secret-access-key:
+    description: "AWS Secret Access Key"
+    required: true
+  aws-region:
+    description: "AWS Region where the S3 bucket is located"
+    required: false
+    default: "eu-west-1"
+  s3-bucket:
+    description: "S3 bucket name containing the ci-scripts.zip file"
+    required: true
+outputs:
+  changed_apps:
+    description: "Comma-separated list of changed applications"
+    value: ${{ steps.identify.outputs.changed_apps }}
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout CI Scripts
+      uses: Traventia/ci-templates/.github/actions/checkout-ci-scripts@main
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
+        s3-bucket: ${{ inputs.s3-bucket }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: "18"
+
+    - name: Identify changes
+      id: identify
+      shell: bash
+      working-directory: ci/scripts
+      run: |
+        CHANGED_PACKAGES=$(node identify_changed_apps.js ${{ inputs.environment }})
+        echo "Changed apps: $CHANGED_PACKAGES"
+        echo "changed_apps=${CHANGED_PACKAGES}" >> $GITHUB_OUTPUT
