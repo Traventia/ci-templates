@@ -31,7 +31,7 @@ runs:
       shell: bash
       run: |
         echo "Fetching remote content hash from S3 object metadata (HEAD request)..."
-        
+
         # Usar HEAD request para obtener solo la metadata, mucho más rápido que GET
         if REMOTE_HASH=$(aws s3api head-object \
           --bucket ${{ inputs.s3-bucket }} \
@@ -72,9 +72,9 @@ runs:
         echo "🔄 Cache miss - downloading ci-scripts.zip from S3 bucket: ${{ inputs.s3-bucket }}"
         aws s3 cp s3://${{ inputs.s3-bucket }}/ci-scripts.zip ./ci-scripts.zip
         echo "📥 File downloaded successfully"
-        
+
         echo "📦 Extracting ci-scripts.zip to ci/ directory"
-        unzip -q ci-scripts.zip -d ci/
+        unzip -o -q ci-scripts.zip -d ci/
         echo "✅ Extraction completed"
 
         # Verify the extraction
@@ -86,7 +86,7 @@ runs:
           echo "❌ Error: ci/scripts directory not found after extraction"
           exit 1
         fi
-        
+
         echo "🗑️  Cleaning up downloaded zip file"
         rm -f ci-scripts.zip
         echo "✅ Download and extraction completed"
@@ -107,7 +107,7 @@ runs:
         echo "🔧 Setting execute permissions for shell scripts"
         find ci/scripts -name "*.sh" -type f -exec chmod +x {} \;
         echo "✅ Execute permissions set for all .sh files"
-        
+
         # Mostrar resumen final con performance info
         if [ "${{ steps.cache-scripts.outputs.cache-hit }}" == "true" ]; then
           echo "🚀 CI Scripts ready (from cache) - Hash: ${{ steps.remote-hash.outputs.hash }}"
