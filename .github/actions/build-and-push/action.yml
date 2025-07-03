@@ -43,11 +43,10 @@ runs:
 
     - name: Build and push images
       shell: bash
-      working-directory: ci/scripts
       env:
         ECR_REGISTRY: ${{ inputs.ecr_registry }}
         IMAGE_TAG: ${{ inputs.image_tag }}
         NPM_TOKEN: ${{ inputs.npm_token }}
         IS_BC: ${{ inputs.is_bc }}
       run: |
-        bash build_and_ecr_push_images.sh ${{ inputs.apps }}
+        bash ci/scripts/build_and_ecr_push_images.sh ${{ inputs.apps }}

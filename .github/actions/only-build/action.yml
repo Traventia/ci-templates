@@ -43,7 +43,6 @@ runs:
 
     - name: Build images only
       shell: bash
-      working-directory: ci/scripts
       env:
         ECR_REGISTRY: ${{ inputs.ecr_registry }}
         IMAGE_TAG: ${{ inputs.image_tag }}
@@ -51,4 +50,4 @@ runs:
         IS_BC: ${{ inputs.is_bc }}
         NOPUSH: 1
       run: |
-        bash build_and_ecr_push_images.sh ${{ inputs.apps }}
+        bash ci/scripts/build_and_ecr_push_images.sh ${{ inputs.apps }}
