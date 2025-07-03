@@ -1,0 +1,107 @@
+# Example: Advanced usage with custom configuration
+# This example shows all available options and different deployment strategies
+
+name: Advanced CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop, "release/*"]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      apps:
+        description: "Specific apps to deploy (comma-separated)"
+        required: false
+        type: string
+      skip_tests:
+        description: "Skip tests"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  # Production deployment on main branch
+  production-deploy:
+    name: Production Deployment
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    uses: Traventia/ci-templates/.github/workflows/ts-srv-cicd.yml@main
+    with:
+      environment: "production"
+      eks_namespace: "production"
+      node_version: "20.x"
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_CI_BUCKET_REGION: ${{ secrets.AWS_CI_BUCKET_REGION }}
+      AWS_CI_BUCKET: ${{ secrets.AWS_CI_BUCKET }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+      EKS_I2_USER_TOKEN: ${{ secrets.EKS_PROD_USER_TOKEN }}
+      EKS_I2_CA: ${{ secrets.EKS_PROD_CA }}
+      EKS_I2_URL: ${{ secrets.EKS_PROD_URL }}
+      EKS_I2_USER_NAME: ${{ secrets.EKS_PROD_USER_NAME }}
+
+  # Staging deployment on develop branch
+  staging-deploy:
+    name: Staging Deployment
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    uses: Traventia/ci-templates/.github/workflows/ts-srv-cicd.yml@main
+    with:
+      environment: "staging"
+      eks_namespace: "staging"
+      node_version: "20.x"
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_CI_BUCKET_REGION: ${{ secrets.AWS_CI_BUCKET_REGION }}
+      AWS_CI_BUCKET: ${{ secrets.AWS_CI_BUCKET }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+      EKS_I2_USER_TOKEN: ${{ secrets.EKS_STAGING_USER_TOKEN }}
+      EKS_I2_CA: ${{ secrets.EKS_STAGING_CA }}
+      EKS_I2_URL: ${{ secrets.EKS_STAGING_URL }}
+      EKS_I2_USER_NAME: ${{ secrets.EKS_STAGING_USER_NAME }}
+
+  # Pull request validation (no deployment)
+  pr-validation:
+    name: PR Validation
+    if: github.event_name == 'pull_request'
+    uses: Traventia/ci-templates/.github/workflows/ts-srv-cicd.yml@main
+    with:
+      environment: "staging"
+      skip_deploy: true
+      node_version: "20.x"
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_CI_BUCKET_REGION: ${{ secrets.AWS_CI_BUCKET_REGION }}
+      AWS_CI_BUCKET: ${{ secrets.AWS_CI_BUCKET }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+
+  # Manual deployment with custom inputs
+  manual-deploy:
+    name: Manual Deployment
+    if: github.event_name == 'workflow_dispatch'
+    uses: Traventia/ci-templates/.github/workflows/ts-srv-cicd.yml@main
+    with:
+      environment: ${{ github.event.inputs.environment }}
+      apps: ${{ github.event.inputs.apps }}
+      skip_tests: ${{ fromJSON(github.event.inputs.skip_tests) }}
+      eks_namespace: ${{ github.event.inputs.environment }}
+      node_version: "20.x"
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_CI_BUCKET_REGION: ${{ secrets.AWS_CI_BUCKET_REGION }}
+      AWS_CI_BUCKET: ${{ secrets.AWS_CI_BUCKET }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+      EKS_I2_USER_TOKEN: ${{ github.event.inputs.environment == 'production' && secrets.EKS_PROD_USER_TOKEN || secrets.EKS_STAGING_USER_TOKEN }}
+      EKS_I2_CA: ${{ github.event.inputs.environment == 'production' && secrets.EKS_PROD_CA || secrets.EKS_STAGING_CA }}
+      EKS_I2_URL: ${{ github.event.inputs.environment == 'production' && secrets.EKS_PROD_URL || secrets.EKS_STAGING_URL }}
+      EKS_I2_USER_NAME: ${{ github.event.inputs.environment == 'production' && secrets.EKS_PROD_USER_NAME || secrets.EKS_STAGING_USER_NAME }}

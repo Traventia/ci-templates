@@ -1,0 +1,30 @@
+# Example: Basic usage of ts-srv-cicd workflow
+# This example shows the minimal configuration needed to use the TypeScript Services CI/CD workflow
+
+name: Basic CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  cicd:
+    name: CI/CD Pipeline
+    uses: Traventia/ci-templates/.github/workflows/ts-srv-cicd.yml@main
+    secrets:
+      # Required AWS secrets for accessing S3 and ECR
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_CI_BUCKET_REGION: ${{ secrets.AWS_CI_BUCKET_REGION }}
+      AWS_CI_BUCKET: ${{ secrets.AWS_CI_BUCKET }}
+
+      # Optional NPM token for private packages
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+
+      # Required for deployment (if not skipping deploy)
+      EKS_I2_USER_TOKEN: ${{ secrets.EKS_I2_USER_TOKEN }}
+      EKS_I2_CA: ${{ secrets.EKS_I2_CA }}
+      EKS_I2_URL: ${{ secrets.EKS_I2_URL }}
+      EKS_I2_USER_NAME: ${{ secrets.EKS_I2_USER_NAME }}

@@ -1,0 +1,52 @@
+# Example: Specific apps deployment
+# This example shows how to deploy only specific applications
+
+name: Specific Apps Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: 'Apps to deploy (e.g., "accommodation,booking,web-bff")'
+        required: true
+        type: string
+      environment:
+        description: "Environment to deploy"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+        default: "staging"
+      skip_tests:
+        description: "Skip tests for faster deployment"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  deploy-specific-apps:
+    name: Deploy ${{ github.event.inputs.apps }} to ${{ github.event.inputs.environment }}
+    uses: Traventia/ci-templates/.github/workflows/ts-srv-cicd.yml@main
+    with:
+      # Deploy only the specified apps
+      apps: ${{ github.event.inputs.apps }}
+      environment: ${{ github.event.inputs.environment }}
+      eks_namespace: ${{ github.event.inputs.environment }}
+
+      # Optional: skip tests for faster deployment if needed
+      skip_tests: ${{ fromJSON(github.event.inputs.skip_tests) }}
+
+      node_version: "20.x"
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_CI_BUCKET_REGION: ${{ secrets.AWS_CI_BUCKET_REGION }}
+      AWS_CI_BUCKET: ${{ secrets.AWS_CI_BUCKET }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+
+      # Use environment-specific Kubernetes secrets
+      EKS_I2_USER_TOKEN: ${{ github.event.inputs.environment == 'production' && secrets.EKS_PROD_USER_TOKEN || secrets.EKS_STAGING_USER_TOKEN }}
+      EKS_I2_CA: ${{ github.event.inputs.environment == 'production' && secrets.EKS_PROD_CA || secrets.EKS_STAGING_CA }}
+      EKS_I2_URL: ${{ github.event.inputs.environment == 'production' && secrets.EKS_PROD_URL || secrets.EKS_STAGING_URL }}
+      EKS_I2_USER_NAME: ${{ github.event.inputs.environment == 'production' && secrets.EKS_PROD_USER_NAME || secrets.EKS_STAGING_USER_NAME }}
