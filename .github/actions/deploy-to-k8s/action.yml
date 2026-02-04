@@ -65,7 +65,21 @@ runs:
     - name: Install kubectl
       shell: bash
       run: |
-        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        # Fetch kubectl version with retries
+        KUBECTL_VERSION=$(curl -L -s --retry 3 --retry-delay 2 \
+          https://dl.k8s.io/release/stable.txt)
+
+        # Validate that version was fetched successfully
+        if [ -z "$KUBECTL_VERSION" ]; then
+          echo "::error::Failed to get kubectl version from dl.k8s.io"
+          exit 1
+        fi
+
+        echo "Installing kubectl version: $KUBECTL_VERSION"
+
+        # Download kubectl binary with retries
+        curl -LO --retry 3 \
+          "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
         chmod +x kubectl
         sudo mv kubectl /usr/local/bin/
 
