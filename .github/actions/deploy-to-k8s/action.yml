@@ -66,12 +66,17 @@ runs:
       shell: bash
       run: |
         # Fetch kubectl version with retries
-        KUBECTL_VERSION=$(curl -L -sS --retry 3 --retry-delay 2 \
+        KUBECTL_RAW=$(curl -L -sS --retry 3 --retry-delay 2 \
           https://dl.k8s.io/release/stable.txt)
 
-        # Validate that version was fetched successfully
+        # Extract only the version line (vX.Y.Z format) from the response
+        # This handles cases where CDN/cache messages are mixed in the output
+        KUBECTL_VERSION=$(echo "$KUBECTL_RAW" | grep -oE '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+
+        # Validate that version was fetched and has correct format
         if [ -z "$KUBECTL_VERSION" ]; then
-          echo "::error::Failed to get kubectl version from dl.k8s.io"
+          echo "::error::Failed to get valid kubectl version from dl.k8s.io"
+          echo "::error::Raw response was: $KUBECTL_RAW"
           exit 1
         fi
 
