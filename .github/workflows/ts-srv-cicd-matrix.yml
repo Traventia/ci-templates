@@ -1,0 +1,283 @@
+name: 'TypeScript Services CI/CD (Matrix)'
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Environment to deploy (production or staging)'
+        required: false
+        type: string
+        default: 'production'
+      apps:
+        description: 'Comma-separated list of apps to deploy. If not provided, app identification will be used'
+        required: false
+        type: string
+      eks_namespace:
+        description: 'EKS namespace for deployment'
+        required: false
+        type: string
+        default: 'default'
+      skip_tests:
+        description: 'Skip test execution'
+        required: false
+        type: boolean
+        default: false
+      skip_integration_tests:
+        description: 'Skip integration test execution'
+        required: false
+        type: boolean
+        default: false
+      skip_build:
+        description: 'Skip build step'
+        required: false
+        type: boolean
+        default: false
+      skip_deploy:
+        description: 'Skip deploy step'
+        required: false
+        type: boolean
+        default: false
+      node_version:
+        description: 'Node.js version to use'
+        required: false
+        type: string
+        default: '20.x'
+      is_bc:
+        description: 'Whether this is a BC build/deploy (1 for true, 0 for false)'
+        required: false
+        type: string
+        default: '0'
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_CI_BUCKET_REGION:
+        required: true
+      AWS_CI_BUCKET:
+        required: true
+      NPM_AUTH_TOKEN:
+        required: false
+      EKS_I2_USER_TOKEN:
+        required: false
+      EKS_I2_CA:
+        required: false
+      EKS_I2_URL:
+        required: false
+      EKS_I2_USER_NAME:
+        required: false
+    outputs:
+      apps_to_deploy:
+        description: 'Comma-separated list of applications that will be deployed'
+        value: ${{ jobs.identify-apps.outputs.apps }}
+
+jobs:
+  identify-apps:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.prepare-matrix.outputs.matrix }}
+      apps: ${{ steps.prepare-matrix.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v3
+        if: ${{ !inputs.apps }}
+        with:
+          fetch-depth: 0
+
+      - name: Identify changed apps
+        if: ${{ !inputs.apps }}
+        id: identify
+        uses: Traventia/ci-templates/.github/actions/identify-changed-apps@main
+        with:
+          environment: ${{ inputs.environment }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+
+      - name: Prepare matrix
+        id: prepare-matrix
+        shell: bash
+        run: |
+          APPS_CSV="${{ steps.identify.outputs.changed_apps || inputs.apps }}"
+          if [ -z "$APPS_CSV" ]; then
+            echo "No apps to process"
+            echo 'matrix=[]' >> $GITHUB_OUTPUT
+            echo 'apps=' >> $GITHUB_OUTPUT
+          else
+            MATRIX_JSON=$(echo "$APPS_CSV" | jq -R -c 'split(",") | map(select(length > 0))')
+            echo "Apps CSV: $APPS_CSV"
+            echo "Matrix JSON: $MATRIX_JSON"
+            echo "matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
+            echo "apps=$APPS_CSV" >> $GITHUB_OUTPUT
+          fi
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    needs: [identify-apps]
+    if: ${{ !inputs.skip_tests && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
+    concurrency:
+      group: unit-tests-${{ matrix.app }}-${{ inputs.environment }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.identify-apps.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js ${{ inputs.node_version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Cache node modules
+        id: cache-npm
+        uses: actions/cache@v3
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-
+
+      - name: Install dependencies
+        if: ${{ steps.cache-npm.outputs.cache-hit != 'true' }}
+        run: make install
+
+      - name: Execute unit tests for ${{ matrix.app }}
+        run: make test ${{ matrix.app }}
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: [identify-apps]
+    if: ${{ !inputs.skip_integration_tests && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
+    concurrency:
+      group: integration-tests-${{ matrix.app }}-${{ inputs.environment }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.identify-apps.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js ${{ inputs.node_version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Cache node modules
+        id: cache-npm
+        uses: actions/cache@v3
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-
+
+      - name: Install dependencies
+        if: ${{ steps.cache-npm.outputs.cache-hit != 'true' }}
+        run: make install
+
+      - name: Install infrastructure dependencies
+        run: make install-infra-deps
+
+      - name: Execute integration tests for ${{ matrix.app }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: make test-i ${{ matrix.app }}
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [identify-apps]
+    if: ${{ !inputs.skip_build && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
+    concurrency:
+      group: build-${{ matrix.app }}-${{ inputs.environment }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.identify-apps.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and push Docker image for ${{ matrix.app }}
+        uses: Traventia/ci-templates/.github/actions/build-and-push@main
+        with:
+          apps: ${{ matrix.app }}
+          ecr_registry: ${{ steps.login-ecr.outputs.registry }}
+          image_tag: ${{ github.sha }}
+          npm_token: ${{ secrets.NPM_AUTH_TOKEN }}
+          is_bc: ${{ inputs.is_bc }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [identify-apps, unit-tests, integration-tests, build]
+    if: ${{ !inputs.skip_deploy && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
+    concurrency:
+      group: deploy-${{ matrix.app }}-${{ inputs.environment }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.identify-apps.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Deploy ${{ matrix.app }} to Kubernetes
+        uses: Traventia/ci-templates/.github/actions/deploy-to-k8s@main
+        with:
+          apps: ${{ matrix.app }}
+          ecr_registry: ${{ steps.login-ecr.outputs.registry }}
+          image_tag: ${{ github.sha }}
+          k8s_user_token: ${{ secrets.EKS_I2_USER_TOKEN }}
+          k8s_ca: ${{ secrets.EKS_I2_CA }}
+          k8s_server_url: ${{ secrets.EKS_I2_URL }}
+          k8s_user_name: ${{ secrets.EKS_I2_USER_NAME }}
+          k8s_namespace: ${{ inputs.eks_namespace }}
+          is_bc: ${{ inputs.is_bc }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+          deploy_env: ${{ inputs.environment }}
