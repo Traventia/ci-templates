@@ -1,6 +1,9 @@
-name: "Identify Changed Apps"
-description: "Identifies which applications have changed based on git diff and deployment history"
+name: "Check Deploy Needed"
+description: "Checks if apps still need deployment by comparing HEAD against last deployed commit in Apolo"
 inputs:
+  apps:
+    description: "Comma-separated list of apps to check"
+    required: true
   environment:
     description: "Environment to check (production or staging)"
     required: false
@@ -23,9 +26,12 @@ inputs:
     required: false
     default: ""
 outputs:
-  changed_apps:
-    description: "Comma-separated list of changed applications"
-    value: ${{ steps.identify.outputs.changed_apps }}
+  filtered_apps:
+    description: "Comma-separated list of apps that still need deployment"
+    value: ${{ steps.check.outputs.filtered_apps }}
+  filtered_matrix:
+    description: "JSON array of apps that still need deployment"
+    value: ${{ steps.check.outputs.filtered_matrix }}
 runs:
   using: "composite"
   steps:
@@ -42,13 +48,21 @@ runs:
       with:
         node-version: "18"
 
-    - name: Identify changes
-      id: identify
+    - name: Check which apps still need deployment
+      id: check
       shell: bash
       working-directory: ci/scripts
       env:
+        APPS: ${{ inputs.apps }}
         APOLO_API_TOKEN: ${{ inputs.apolo-api-token }}
       run: |
-        CHANGED_PACKAGES=$(node identify_changed_apps.js ${{ inputs.environment }})
-        echo "Changed apps: $CHANGED_PACKAGES"
-        echo "changed_apps=${CHANGED_PACKAGES}" >> $GITHUB_OUTPUT
+        FILTERED=$(node check_deploy_needed.js ${{ inputs.environment }})
+        echo "Filtered apps: $FILTERED"
+        echo "filtered_apps=${FILTERED}" >> $GITHUB_OUTPUT
+        if [ -z "$FILTERED" ]; then
+          echo "filtered_matrix=[]" >> $GITHUB_OUTPUT
+        else
+          MATRIX_JSON=$(echo "$FILTERED" | jq -R -c 'split(",") | map(select(length > 0))')
+          echo "Filtered matrix: $MATRIX_JSON"
+          echo "filtered_matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
+        fi

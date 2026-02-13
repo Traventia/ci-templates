@@ -48,10 +48,12 @@ on:
         required: true
       NPM_AUTH_TOKEN:
         required: false
+      APOLO_API_TOKEN:
+        required: false
     outputs:
       apps_built:
         description: 'Comma-separated list of applications that were built'
-        value: ${{ jobs.identify-apps.outputs.apps }}
+        value: ${{ jobs.check-still-needed.outputs.apps }}
 
 jobs:
   identify-apps:
@@ -75,6 +77,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
           s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
 
       - name: Prepare matrix
         id: prepare-matrix
@@ -93,17 +96,41 @@ jobs:
             echo "apps=$APPS_CSV" >> $GITHUB_OUTPUT
           fi
 
-  unit-tests:
+  check-still-needed:
     runs-on: ubuntu-latest
     needs: [identify-apps]
-    if: ${{ !inputs.skip_tests && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
+    if: ${{ needs.identify-apps.outputs.matrix != '[]' && needs.identify-apps.outputs.apps != '' }}
+    outputs:
+      matrix: ${{ steps.check.outputs.filtered_matrix }}
+      apps: ${{ steps.check.outputs.filtered_apps }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Check which apps still need processing
+        id: check
+        uses: Traventia/ci-templates/.github/actions/check-deploy-needed@main
+        with:
+          apps: ${{ needs.identify-apps.outputs.apps }}
+          environment: ${{ inputs.environment }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    needs: [check-still-needed]
+    if: ${{ !inputs.skip_tests && !cancelled() && !failure() && needs.check-still-needed.outputs.matrix != '[]' }}
     concurrency:
       group: unit-tests-${{ matrix.app }}-${{ inputs.environment }}
       cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
-        app: ${{ fromJson(needs.identify-apps.outputs.matrix) }}
+        app: ${{ fromJson(needs.check-still-needed.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -135,15 +162,15 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
-    needs: [identify-apps]
-    if: ${{ !inputs.skip_integration_tests && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
+    needs: [check-still-needed]
+    if: ${{ !inputs.skip_integration_tests && !cancelled() && !failure() && needs.check-still-needed.outputs.matrix != '[]' }}
     concurrency:
       group: integration-tests-${{ matrix.app }}-${{ inputs.environment }}
       cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
-        app: ${{ fromJson(needs.identify-apps.outputs.matrix) }}
+        app: ${{ fromJson(needs.check-still-needed.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -181,15 +208,15 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    needs: [identify-apps]
-    if: ${{ !inputs.skip_build && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
+    needs: [check-still-needed]
+    if: ${{ !inputs.skip_build && !cancelled() && !failure() && needs.check-still-needed.outputs.matrix != '[]' }}
     concurrency:
       group: build-${{ matrix.app }}-${{ inputs.environment }}
       cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
-        app: ${{ fromJson(needs.identify-apps.outputs.matrix) }}
+        app: ${{ fromJson(needs.check-still-needed.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v3
         with:

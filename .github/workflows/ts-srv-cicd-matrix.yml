@@ -66,10 +66,12 @@ on:
         required: false
       EKS_I2_USER_NAME:
         required: false
+      APOLO_API_TOKEN:
+        required: false
     outputs:
       apps_to_deploy:
         description: 'Comma-separated list of applications that will be deployed'
-        value: ${{ jobs.identify-apps.outputs.apps }}
+        value: ${{ jobs.check-still-needed.outputs.apps }}
 
 jobs:
   identify-apps:
@@ -93,6 +95,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
           s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
 
       - name: Prepare matrix
         id: prepare-matrix
@@ -111,17 +114,41 @@ jobs:
             echo "apps=$APPS_CSV" >> $GITHUB_OUTPUT
           fi
 
-  unit-tests:
+  check-still-needed:
     runs-on: ubuntu-latest
     needs: [identify-apps]
-    if: ${{ !inputs.skip_tests && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
+    if: ${{ needs.identify-apps.outputs.matrix != '[]' && needs.identify-apps.outputs.apps != '' }}
+    outputs:
+      matrix: ${{ steps.check.outputs.filtered_matrix }}
+      apps: ${{ steps.check.outputs.filtered_apps }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Check which apps still need deployment
+        id: check
+        uses: Traventia/ci-templates/.github/actions/check-deploy-needed@main
+        with:
+          apps: ${{ needs.identify-apps.outputs.apps }}
+          environment: ${{ inputs.environment }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    needs: [check-still-needed]
+    if: ${{ !inputs.skip_tests && !cancelled() && !failure() && needs.check-still-needed.outputs.matrix != '[]' }}
     concurrency:
       group: unit-tests-${{ matrix.app }}-${{ inputs.environment }}
       cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
-        app: ${{ fromJson(needs.identify-apps.outputs.matrix) }}
+        app: ${{ fromJson(needs.check-still-needed.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -153,15 +180,15 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
-    needs: [identify-apps]
-    if: ${{ !inputs.skip_integration_tests && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
+    needs: [check-still-needed]
+    if: ${{ !inputs.skip_integration_tests && !cancelled() && !failure() && needs.check-still-needed.outputs.matrix != '[]' }}
     concurrency:
       group: integration-tests-${{ matrix.app }}-${{ inputs.environment }}
       cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
-        app: ${{ fromJson(needs.identify-apps.outputs.matrix) }}
+        app: ${{ fromJson(needs.check-still-needed.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -199,15 +226,15 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    needs: [identify-apps]
-    if: ${{ !inputs.skip_build && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
+    needs: [check-still-needed]
+    if: ${{ !inputs.skip_build && !cancelled() && !failure() && needs.check-still-needed.outputs.matrix != '[]' }}
     concurrency:
       group: build-${{ matrix.app }}-${{ inputs.environment }}
       cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
-        app: ${{ fromJson(needs.identify-apps.outputs.matrix) }}
+        app: ${{ fromJson(needs.check-still-needed.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -239,21 +266,34 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [identify-apps, unit-tests, integration-tests, build]
-    if: ${{ !inputs.skip_deploy && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
+    needs: [check-still-needed, unit-tests, integration-tests, build]
+    if: ${{ !inputs.skip_deploy && !cancelled() && !failure() && needs.check-still-needed.outputs.matrix != '[]' }}
     concurrency:
       group: deploy-${{ matrix.app }}-${{ inputs.environment }}
       cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
-        app: ${{ fromJson(needs.identify-apps.outputs.matrix) }}
+        app: ${{ fromJson(needs.check-still-needed.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
+      - name: Re-check if deploy is still needed for ${{ matrix.app }}
+        id: recheck
+        uses: Traventia/ci-templates/.github/actions/check-deploy-needed@main
+        with:
+          apps: ${{ matrix.app }}
+          environment: ${{ inputs.environment }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
+
       - name: Configure AWS credentials
+        if: ${{ steps.recheck.outputs.filtered_apps != '' }}
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -261,10 +301,12 @@ jobs:
           aws-region: eu-west-1
 
       - name: Login to Amazon ECR
+        if: ${{ steps.recheck.outputs.filtered_apps != '' }}
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
       - name: Deploy ${{ matrix.app }} to Kubernetes
+        if: ${{ steps.recheck.outputs.filtered_apps != '' }}
         uses: Traventia/ci-templates/.github/actions/deploy-to-k8s@main
         with:
           apps: ${{ matrix.app }}
@@ -281,3 +323,9 @@ jobs:
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
           s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
           deploy_env: ${{ inputs.environment }}
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
+
+      - name: Deploy skipped
+        if: ${{ steps.recheck.outputs.filtered_apps == '' }}
+        shell: bash
+        run: echo "Deploy skipped for ${{ matrix.app }} - changes already deployed by a previous pipeline"

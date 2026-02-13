@@ -46,6 +46,10 @@ inputs:
     description: "Whether this is a BC deployment (1 for true, 0 for false)"
     required: false
     default: "0"
+  apolo-api-token:
+    description: "API token for Apolo authentication"
+    required: false
+    default: ""
 runs:
   using: "composite"
   steps:
@@ -99,6 +103,7 @@ runs:
         IS_BC: ${{ inputs.is_bc }}
         USER_CHANGE: ${{ github.actor }}
         GITHUB_CONTEXT: ${{ toJson(github) }}
+        APOLO_API_TOKEN: ${{ inputs.apolo-api-token }}
       run: |
         echo "Starting deployment process..."
         bash deploy_apps.sh ${{ inputs.apps }}
