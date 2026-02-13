@@ -256,20 +256,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Re-check if deploy is still needed for ${{ matrix.app }}
-        id: recheck
-        uses: Traventia/ci-templates/.github/actions/check-deploy-needed@main
-        with:
-          apps: ${{ matrix.app }}
-          environment: ${{ inputs.environment }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
-          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
-          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
-
       - name: Configure AWS credentials
-        if: ${{ steps.recheck.outputs.filtered_apps != '' }}
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -277,12 +264,10 @@ jobs:
           aws-region: eu-west-1
 
       - name: Login to Amazon ECR
-        if: ${{ steps.recheck.outputs.filtered_apps != '' }}
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
       - name: Deploy ${{ matrix.app }} to Kubernetes
-        if: ${{ steps.recheck.outputs.filtered_apps != '' }}
         uses: Traventia/ci-templates/.github/actions/deploy-to-k8s@main
         with:
           apps: ${{ matrix.app }}
@@ -300,8 +285,3 @@ jobs:
           s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
           deploy_env: ${{ inputs.environment }}
           apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
-
-      - name: Deploy skipped
-        if: ${{ steps.recheck.outputs.filtered_apps == '' }}
-        shell: bash
-        run: echo "Deploy skipped for ${{ matrix.app }} - changes already deployed by a previous pipeline"
