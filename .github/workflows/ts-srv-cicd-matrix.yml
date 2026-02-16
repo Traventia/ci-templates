@@ -118,9 +118,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [identify-apps]
     if: ${{ !inputs.skip_tests && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
-    concurrency:
-      group: unit-tests-${{ matrix.app }}-${{ inputs.environment }}
-      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -158,9 +155,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [identify-apps]
     if: ${{ !inputs.skip_integration_tests && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
-    concurrency:
-      group: integration-tests-${{ matrix.app }}-${{ inputs.environment }}
-      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -204,9 +198,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [identify-apps]
     if: ${{ !inputs.skip_build && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
-    concurrency:
-      group: build-${{ matrix.app }}-${{ inputs.environment }}
-      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
