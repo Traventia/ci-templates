@@ -148,6 +148,20 @@ jobs:
             echo "All apps already deployed. Pipeline will skip remaining jobs."
           fi
 
+      - name: Mark apps as PROCESSING
+        if: ${{ steps.recheck.outputs.filtered_apps != '' }}
+        uses: Traventia/ci-templates/.github/actions/mark-pipeline-status@main
+        with:
+          apps: ${{ steps.recheck.outputs.filtered_apps }}
+          commit-id: ${{ github.sha }}
+          environment: ${{ inputs.environment }}
+          status: PROCESSING
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+
   unit-tests:
     runs-on: ubuntu-latest
     needs: [check-still-needed]
@@ -344,3 +358,23 @@ jobs:
           s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
           deploy_env: ${{ inputs.environment }}
           apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
+
+  cleanup-on-failure:
+    runs-on: ubuntu-latest
+    needs: [check-still-needed, unit-tests, integration-tests, build, deploy]
+    if: ${{ failure() && needs.check-still-needed.outputs.filtered_apps != '' }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Mark failed apps as ERROR
+        uses: Traventia/ci-templates/.github/actions/mark-pipeline-status@main
+        with:
+          apps: ${{ needs.check-still-needed.outputs.filtered_apps }}
+          commit-id: ${{ github.sha }}
+          environment: ${{ inputs.environment }}
+          status: ERROR
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}

@@ -1,0 +1,63 @@
+name: "Mark Pipeline Status"
+description: "Marks deployment records in Apolo with pipeline status (PROCESSING/ERROR)"
+inputs:
+  apps:
+    description: "Comma-separated list of apps to mark"
+    required: true
+  commit-id:
+    description: "Git commit SHA being processed"
+    required: true
+  environment:
+    description: "Environment (production or staging)"
+    required: false
+    default: "production"
+  status:
+    description: "Pipeline status to set (PROCESSING or ERROR)"
+    required: true
+  apolo-api-token:
+    description: "API token for Apolo authentication"
+    required: true
+  aws-access-key-id:
+    description: "AWS Access Key ID"
+    required: true
+  aws-secret-access-key:
+    description: "AWS Secret Access Key"
+    required: true
+  aws-region:
+    description: "AWS Region where the S3 bucket is located"
+    required: false
+    default: "eu-west-1"
+  s3-bucket:
+    description: "S3 bucket name containing the ci-scripts.zip file"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout CI Scripts
+      uses: Traventia/ci-templates/.github/actions/checkout-ci-scripts@main
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
+        s3-bucket: ${{ inputs.s3-bucket }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: "18"
+
+    - name: Mark pipeline status for apps
+      shell: bash
+      working-directory: ci/scripts
+      env:
+        APOLO_API_TOKEN: ${{ inputs.apolo-api-token }}
+      run: |
+        IFS=',' read -r -a apps <<< "${{ inputs.apps }}"
+        for app in "${apps[@]}"; do
+          app=$(echo "$app" | xargs) # trim whitespace
+          if [ -n "$app" ]; then
+            echo "Marking $app as ${{ inputs.status }}..."
+            node mark_pipeline_status.cjs "$app" "${{ inputs.commit-id }}" "${{ inputs.environment }}" "${{ inputs.status }}"
+          fi
+        done
+        echo "All apps marked as ${{ inputs.status }}"
