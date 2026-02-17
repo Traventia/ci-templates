@@ -34,9 +34,9 @@ on:
         default: false
       skip_deploy:
         description: "Skip deploy step"
-        required: false
+        required: true
         type: boolean
-        default: false
+        default: true
       node_version:
         description: "Node.js version to use"
         required: false
@@ -278,6 +278,52 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
           s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [check-still-needed, unit-tests, integration-tests, build]
+    if: ${{ !inputs.skip_deploy && !cancelled() && !failure() && needs.check-still-needed.outputs.filtered_matrix != '[]' && needs.check-still-needed.outputs.filtered_matrix != '' }}
+    concurrency:
+      group: deploy-${{ matrix.app }}-${{ inputs.environment }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.check-still-needed.outputs.filtered_matrix) }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Deploy ${{ matrix.app }} to Kubernetes
+        uses: Traventia/ci-templates/.github/actions/deploy-to-k8s@main
+        with:
+          apps: ${{ matrix.app }}
+          ecr_registry: ${{ steps.login-ecr.outputs.registry }}
+          image_tag: ${{ github.sha }}
+          k8s_user_token: ${{ secrets.EKS_I2_USER_TOKEN }}
+          k8s_ca: ${{ secrets.EKS_I2_CA }}
+          k8s_server_url: ${{ secrets.EKS_I2_URL }}
+          k8s_user_name: ${{ secrets.EKS_I2_USER_NAME }}
+          k8s_namespace: ${{ inputs.eks_namespace }}
+          is_bc: ${{ inputs.is_bc }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+          deploy_env: ${{ inputs.environment }}
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
 
   cleanup-on-failure:
     runs-on: ubuntu-latest
