@@ -295,30 +295,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Re-check before deploy (Level 2)
-        id: l2-recheck
-        uses: Traventia/ci-templates/.github/actions/check-deploy-needed@main
-        with:
-          apps: ${{ matrix.app }}
-          environment: ${{ inputs.environment }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
-          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
-          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
-
-      - name: Log Level 2 re-check result
-        shell: bash
-        run: |
-          echo "L2 re-check for ${{ matrix.app }}: filtered_apps=${{ steps.l2-recheck.outputs.filtered_apps }}"
-          if [ -z "${{ steps.l2-recheck.outputs.filtered_apps }}" ]; then
-            echo "SKIPPING deploy for ${{ matrix.app }} - already deployed by another pipeline"
-          else
-            echo "PROCEEDING with deploy for ${{ matrix.app }}"
-          fi
-
       - name: Configure AWS credentials
-        if: ${{ steps.l2-recheck.outputs.filtered_apps != '' }}
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -326,12 +303,10 @@ jobs:
           aws-region: eu-west-1
 
       - name: Login to Amazon ECR
-        if: ${{ steps.l2-recheck.outputs.filtered_apps != '' }}
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
       - name: Deploy ${{ matrix.app }} to Kubernetes
-        if: ${{ steps.l2-recheck.outputs.filtered_apps != '' }}
         uses: Traventia/ci-templates/.github/actions/deploy-to-k8s@main
         with:
           apps: ${{ matrix.app }}
