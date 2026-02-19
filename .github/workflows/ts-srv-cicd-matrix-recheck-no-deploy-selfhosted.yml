@@ -78,12 +78,47 @@ on:
         required: false
       APOLO_API_TOKEN:
         required: false
+      RUNNER_WAKE_URL:
+        required: false
+      RUNNER_WAKE_API_KEY:
+        required: false
     outputs:
       apps_to_deploy:
         description: "Comma-separated list of applications that will be deployed"
         value: ${{ jobs.check-still-needed.outputs.filtered_apps }}
 
 jobs:
+  wake-runners:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.persistent_infra }}
+    steps:
+      - name: Wake up self-hosted runners
+        run: |
+          if [ -z "${{ secrets.RUNNER_WAKE_URL }}" ]; then
+            echo "No wake URL configured, skipping"
+            exit 0
+          fi
+
+          echo "Waking up self-hosted runners..."
+          HTTP_STATUS=$(curl -s -o /tmp/wake-response.json -w "%{http_code}" \
+            -X POST \
+            -H "x-api-key: ${{ secrets.RUNNER_WAKE_API_KEY }}" \
+            "${{ secrets.RUNNER_WAKE_URL }}")
+
+          echo "Response ($HTTP_STATUS):"
+          cat /tmp/wake-response.json
+          echo ""
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -gt 299 ]; then
+            echo "::warning::Wake API returned $HTTP_STATUS - runners may not be available"
+          fi
+
+      - name: Wait for runners to reconnect
+        run: |
+          echo "Waiting 45s for runners to resume from hibernate and reconnect..."
+          sleep 45
+          echo "Done"
+
   identify-apps:
     runs-on: ubuntu-latest
     outputs:
@@ -174,7 +209,7 @@ jobs:
 
   unit-tests:
     runs-on: ${{ fromJson(inputs.runner_labels) }}
-    needs: [check-still-needed]
+    needs: [check-still-needed, wake-runners]
     if: ${{ !inputs.skip_tests && !cancelled() && !failure() && needs.check-still-needed.outputs.filtered_matrix != '[]' && needs.check-still-needed.outputs.filtered_matrix != '' }}
     strategy:
       fail-fast: false
@@ -219,7 +254,7 @@ jobs:
 
   integration-tests:
     runs-on: ${{ fromJson(inputs.runner_labels) }}
-    needs: [check-still-needed]
+    needs: [check-still-needed, wake-runners]
     if: ${{ !inputs.skip_integration_tests && !cancelled() && !failure() && needs.check-still-needed.outputs.filtered_matrix != '[]' && needs.check-still-needed.outputs.filtered_matrix != '' }}
     strategy:
       fail-fast: false
@@ -274,7 +309,7 @@ jobs:
 
   build:
     runs-on: ${{ fromJson(inputs.runner_labels) }}
-    needs: [check-still-needed]
+    needs: [check-still-needed, wake-runners]
     if: ${{ !inputs.skip_build && !cancelled() && !failure() && needs.check-still-needed.outputs.filtered_matrix != '[]' && needs.check-still-needed.outputs.filtered_matrix != '' }}
     strategy:
       fail-fast: false
