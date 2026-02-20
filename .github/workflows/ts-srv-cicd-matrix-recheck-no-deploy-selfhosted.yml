@@ -32,6 +32,11 @@ on:
         required: false
         type: boolean
         default: false
+      skip_push:
+        description: "Skip pushing Docker images to ECR (build only)"
+        required: false
+        type: boolean
+        default: false
       skip_deploy:
         description: "Skip deploy step"
         required: true
@@ -339,6 +344,7 @@ jobs:
           image_tag: ${{ github.sha }}
           npm_token: ${{ secrets.NPM_AUTH_TOKEN }}
           is_bc: ${{ inputs.is_bc }}
+          skip_push: ${{ inputs.skip_push }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
@@ -390,9 +396,29 @@ jobs:
           deploy_env: ${{ inputs.environment }}
           apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
 
+  finalize-no-deploy:
+    runs-on: ubuntu-latest
+    needs: [check-still-needed, unit-tests, integration-tests, build]
+    if: ${{ inputs.skip_deploy && !cancelled() && !failure() && needs.check-still-needed.outputs.filtered_apps != '' }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Mark pipeline records as SKIPPED
+        uses: Traventia/ci-templates/.github/actions/mark-pipeline-status@main
+        with:
+          apps: ${{ needs.check-still-needed.outputs.filtered_apps }}
+          commit-id: ${{ github.sha }}
+          environment: ${{ inputs.environment }}
+          status: SKIPPED
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+
   cleanup-on-failure:
     runs-on: ubuntu-latest
-    needs: [check-still-needed, unit-tests, integration-tests, build, deploy]
+    needs: [check-still-needed, unit-tests, integration-tests, build, deploy, finalize-no-deploy]
     if: ${{ failure() && needs.check-still-needed.outputs.filtered_apps != '' }}
     steps:
       - uses: actions/checkout@v3

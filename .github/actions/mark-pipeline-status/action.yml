@@ -1,5 +1,5 @@
 name: "Mark Pipeline Status"
-description: "Marks deployment records in Apolo with pipeline status (PROCESSING/ERROR)"
+description: "Marks deployment records in Apolo with pipeline status (PROCESSING/ERROR/SKIPPED)"
 inputs:
   apps:
     description: "Comma-separated list of apps to mark"
@@ -12,7 +12,7 @@ inputs:
     required: false
     default: "production"
   status:
-    description: "Pipeline status to set (PROCESSING or ERROR)"
+    description: "Pipeline status to set (PROCESSING, ERROR, or SKIPPED)"
     required: true
   apolo-api-token:
     description: "API token for Apolo authentication"

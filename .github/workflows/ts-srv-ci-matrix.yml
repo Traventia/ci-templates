@@ -27,6 +27,11 @@ on:
         required: false
         type: boolean
         default: false
+      skip_push:
+        description: 'Skip pushing Docker images to ECR (build only)'
+        required: false
+        type: boolean
+        default: true
       node_version:
         description: 'Node.js version to use'
         required: false
@@ -201,13 +206,14 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
 
       - name: Build Docker image for ${{ matrix.app }}
-        uses: Traventia/ci-templates/.github/actions/only-build@main
+        uses: Traventia/ci-templates/.github/actions/build-and-push@main
         with:
           apps: ${{ matrix.app }}
           ecr_registry: ${{ steps.login-ecr.outputs.registry }}
           image_tag: ${{ github.sha }}
           npm_token: ${{ secrets.NPM_AUTH_TOKEN }}
           is_bc: ${{ inputs.is_bc }}
+          skip_push: ${{ inputs.skip_push }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}

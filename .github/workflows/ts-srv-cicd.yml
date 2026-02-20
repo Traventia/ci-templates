@@ -32,6 +32,11 @@ on:
         required: false
         type: boolean
         default: false
+      skip_push:
+        description: "Skip pushing Docker images to ECR (build only)"
+        required: false
+        type: boolean
+        default: false
       skip_deploy:
         description: "Skip deploy step"
         required: false
@@ -202,6 +207,7 @@ jobs:
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
           s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
           is_bc: ${{ inputs.is_bc }}
+          skip_push: ${{ inputs.skip_push }}
 
   deploy:
     runs-on: ubuntu-latest

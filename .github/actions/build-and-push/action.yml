@@ -30,6 +30,10 @@ inputs:
     description: "Whether this is a BC build (1 for true, 0 for false)"
     required: false
     default: "0"
+  skip_push:
+    description: "Skip pushing images to ECR (build only)"
+    required: false
+    default: "false"
 runs:
   using: "composite"
   steps:
@@ -48,6 +52,7 @@ runs:
         IMAGE_TAG: ${{ inputs.image_tag }}
         NPM_TOKEN: ${{ inputs.npm_token }}
         IS_BC: ${{ inputs.is_bc }}
+        NOPUSH: ${{ inputs.skip_push == 'true' && '1' || '0' }}
       run: |
         make build-ci
         bash ci/scripts/build_and_ecr_push_images.sh ${{ inputs.apps }}
