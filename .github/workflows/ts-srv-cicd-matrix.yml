@@ -240,7 +240,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [identify-apps, unit-tests, integration-tests, build]
-    if: ${{ !inputs.skip_deploy && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
+    if: ${{ !inputs.skip_deploy && !inputs.skip_push && !cancelled() && !failure() && needs.identify-apps.outputs.matrix != '[]' }}
     concurrency:
       group: deploy-${{ matrix.app }}-${{ inputs.environment }}
       cancel-in-progress: false
