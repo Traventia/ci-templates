@@ -22,6 +22,10 @@ inputs:
     description: "API token for Apolo authentication"
     required: false
     default: ""
+  branch:
+    description: "Git branch name for branch-aware change detection"
+    required: false
+    default: ""
 outputs:
   changed_apps:
     description: "Comma-separated list of changed applications"
@@ -48,6 +52,7 @@ runs:
       working-directory: ci/scripts
       env:
         APOLO_API_TOKEN: ${{ inputs.apolo-api-token }}
+        DEPLOY_BRANCH: ${{ inputs.branch }}
       run: |
         CHANGED_PACKAGES=$(node identify_changed_apps.js ${{ inputs.environment }})
         echo "Changed apps: $CHANGED_PACKAGES"

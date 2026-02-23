@@ -25,6 +25,10 @@ inputs:
     description: "API token for Apolo authentication"
     required: false
     default: ""
+  branch:
+    description: "Git branch name for branch-aware deploy checking"
+    required: false
+    default: ""
 outputs:
   filtered_apps:
     description: "Comma-separated list of apps that still need deployment"
@@ -55,6 +59,7 @@ runs:
       env:
         APPS: ${{ inputs.apps }}
         APOLO_API_TOKEN: ${{ inputs.apolo-api-token }}
+        DEPLOY_BRANCH: ${{ inputs.branch }}
       run: |
         FILTERED=$(node check_deploy_needed.js ${{ inputs.environment }})
         echo "Filtered apps: $FILTERED"

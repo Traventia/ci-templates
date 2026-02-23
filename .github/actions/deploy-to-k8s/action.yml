@@ -50,6 +50,10 @@ inputs:
     description: "API token for Apolo authentication"
     required: false
     default: ""
+  branch:
+    description: "Git branch name for branch-aware deployment tracking"
+    required: false
+    default: ""
 runs:
   using: "composite"
   steps:
@@ -104,6 +108,7 @@ runs:
         USER_CHANGE: ${{ github.actor }}
         GITHUB_CONTEXT: ${{ toJson(github) }}
         APOLO_API_TOKEN: ${{ inputs.apolo-api-token }}
+        DEPLOY_BRANCH: ${{ inputs.branch }}
       run: |
         echo "Starting deployment process..."
         bash deploy_apps.sh ${{ inputs.apps }}

@@ -141,6 +141,7 @@ jobs:
         uses: Traventia/ci-templates/.github/actions/identify-changed-apps@main
         with:
           environment: ${{ inputs.environment }}
+          branch: ${{ github.head_ref || github.ref_name }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
@@ -182,6 +183,7 @@ jobs:
         with:
           apps: ${{ needs.identify-apps.outputs.apps }}
           environment: ${{ inputs.environment }}
+          branch: ${{ github.head_ref || github.ref_name }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
@@ -206,6 +208,7 @@ jobs:
           commit-id: ${{ github.sha }}
           environment: ${{ inputs.environment }}
           status: PROCESSING
+          branch: ${{ github.head_ref || github.ref_name }}
           apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -392,6 +395,7 @@ jobs:
           s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
           deploy_env: ${{ inputs.environment }}
           apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
+          branch: ${{ github.head_ref || github.ref_name }}
 
   finalize-no-deploy:
     runs-on: ubuntu-latest
@@ -407,6 +411,7 @@ jobs:
           commit-id: ${{ github.sha }}
           environment: ${{ inputs.environment }}
           status: SKIPPED
+          branch: ${{ github.head_ref || github.ref_name }}
           apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -427,6 +432,7 @@ jobs:
           commit-id: ${{ github.sha }}
           environment: ${{ inputs.environment }}
           status: ERROR
+          branch: ${{ github.head_ref || github.ref_name }}
           apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
