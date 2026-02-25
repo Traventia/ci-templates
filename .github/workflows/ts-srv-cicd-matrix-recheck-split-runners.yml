@@ -396,7 +396,7 @@ jobs:
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push Docker image for ${{ matrix.app }}
         uses: Traventia/ci-templates/.github/actions/build-and-push@main
@@ -437,7 +437,7 @@ jobs:
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Deploy ${{ matrix.app }} to Kubernetes
         uses: Traventia/ci-templates/.github/actions/deploy-to-k8s@main
