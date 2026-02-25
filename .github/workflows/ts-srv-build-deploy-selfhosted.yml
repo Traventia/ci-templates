@@ -72,9 +72,11 @@ jobs:
     if: ${{ inputs.persistent_infra_build }}
     steps:
       - name: Wake up build runners
+        id: wake
         run: |
           if [ -z "${{ secrets.RUNNER_WAKE_URL_BUILD }}" ]; then
             echo "No build wake URL configured, skipping"
+            echo "needs_wait=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
@@ -84,15 +86,22 @@ jobs:
             -H "x-api-key: ${{ secrets.RUNNER_WAKE_API_KEY_BUILD }}" \
             "${{ secrets.RUNNER_WAKE_URL_BUILD }}")
 
-          echo "Response ($HTTP_STATUS):"
-          cat /tmp/wake-response.json
-          echo ""
+          RESPONSE=$(cat /tmp/wake-response.json)
+          echo "Response ($HTTP_STATUS): $RESPONSE"
 
           if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -gt 299 ]; then
-            echo "::warning::Wake API returned $HTTP_STATUS - runners may not be available"
+            echo "::error::Wake API returned $HTTP_STATUS - runners may not be available"
+            exit 1
+          elif echo "$RESPONSE" | grep -q '"started":0'; then
+            echo "Runners already active, no wait needed"
+            echo "needs_wait=false" >> $GITHUB_OUTPUT
+          else
+            echo "Runners starting up, will wait for reconnect"
+            echo "needs_wait=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Wait for runners to reconnect
+        if: steps.wake.outputs.needs_wait == 'true'
         run: |
           echo "Waiting 45s for runners to resume from hibernate..."
           sleep 45
