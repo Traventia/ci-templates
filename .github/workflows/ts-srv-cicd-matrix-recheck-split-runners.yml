@@ -368,7 +368,14 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-1
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+
+      - name: Set AWS region for instance role
+        if: ${{ inputs.persistent_infra_build }}
+        shell: bash
+        run: |
+          echo "AWS_REGION=${{ secrets.AWS_CI_BUCKET_REGION }}" >> $GITHUB_ENV
+          echo "AWS_DEFAULT_REGION=${{ secrets.AWS_CI_BUCKET_REGION }}" >> $GITHUB_ENV
 
       - name: Login to Amazon ECR
         id: login-ecr
