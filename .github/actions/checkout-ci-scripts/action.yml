@@ -4,11 +4,13 @@ author: "Traventia"
 
 inputs:
   aws-access-key-id:
-    description: "AWS Access Key ID"
-    required: true
+    description: "AWS Access Key ID (optional on EC2 instances with IAM role)"
+    required: false
+    default: ''
   aws-secret-access-key:
-    description: "AWS Secret Access Key"
-    required: true
+    description: "AWS Secret Access Key (optional on EC2 instances with IAM role)"
+    required: false
+    default: ''
   aws-region:
     description: "AWS Region where the S3 bucket is located"
     required: true
@@ -20,6 +22,7 @@ runs:
   using: "composite"
   steps:
     - name: Configure AWS credentials
+      if: ${{ inputs.aws-access-key-id != '' }}
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-access-key-id: ${{ inputs.aws-access-key-id }}

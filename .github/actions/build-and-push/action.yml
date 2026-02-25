@@ -14,11 +14,13 @@ inputs:
     description: "NPM authentication token"
     required: false
   aws-access-key-id:
-    description: "AWS Access Key ID"
-    required: true
+    description: "AWS Access Key ID (optional on EC2 instances with IAM role)"
+    required: false
+    default: ''
   aws-secret-access-key:
-    description: "AWS Secret Access Key"
-    required: true
+    description: "AWS Secret Access Key (optional on EC2 instances with IAM role)"
+    required: false
+    default: ''
   aws-region:
     description: "AWS Region where the S3 bucket is located"
     required: false
