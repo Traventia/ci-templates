@@ -1,0 +1,458 @@
+name: 'TypeScript Services CI/CD (Matrix + Recheck + Split Runners) V2'
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Environment to deploy (production or staging)'
+        required: false
+        type: string
+        default: 'production'
+      apps:
+        description: 'Comma-separated list of apps to deploy. If not provided, app identification will be used'
+        required: false
+        type: string
+      eks_namespace:
+        description: 'EKS namespace for deployment'
+        required: false
+        type: string
+        default: 'default'
+      skip_tests:
+        description: 'Skip test execution'
+        required: false
+        type: boolean
+        default: false
+      skip_integration_tests:
+        description: 'Skip integration test execution'
+        required: false
+        type: boolean
+        default: false
+      skip_build:
+        description: 'Skip build step'
+        required: false
+        type: boolean
+        default: false
+      skip_push:
+        description: 'Skip pushing Docker images to ECR (build only)'
+        required: false
+        type: boolean
+        default: false
+      skip_deploy:
+        description: 'Skip deploy step'
+        required: false
+        type: boolean
+        default: false
+      node_version:
+        description: 'Node.js version to use'
+        required: false
+        type: string
+        default: '20.x'
+      is_bc:
+        description: 'Whether this is a BC build/deploy (1 for true, 0 for false)'
+        required: false
+        type: string
+        default: '0'
+      test_runner_labels:
+        description: 'JSON array of runner labels for test jobs (unit + integration)'
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
+      build_runner_labels:
+        description: 'JSON array of runner labels for the build job'
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
+      persistent_infra_test:
+        description: 'Whether test runners have pre-installed infra services (skip docker compose, use health check instead)'
+        required: false
+        type: boolean
+        default: false
+      persistent_infra_build:
+        description: 'Whether build runners have Docker pre-installed (skip setup steps)'
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_CI_BUCKET_REGION:
+        required: true
+      AWS_CI_BUCKET:
+        required: true
+      NPM_AUTH_TOKEN:
+        required: false
+      EKS_I2_USER_TOKEN:
+        required: false
+      EKS_I2_CA:
+        required: false
+      EKS_I2_URL:
+        required: false
+      EKS_I2_USER_NAME:
+        required: false
+      APOLO_API_TOKEN:
+        required: false
+      RUNNER_WAKE_URL_TEST:
+        required: false
+      RUNNER_WAKE_API_KEY_TEST:
+        required: false
+      RUNNER_WAKE_URL_BUILD:
+        required: false
+      RUNNER_WAKE_API_KEY_BUILD:
+        required: false
+    outputs:
+      apps_to_deploy:
+        description: 'Comma-separated list of applications that will be deployed'
+        value: ${{ jobs.check-still-needed.outputs.filtered_apps }}
+
+jobs:
+  wake-runners:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.persistent_infra_test || inputs.persistent_infra_build }}
+    steps:
+      - name: Wake up test runners
+        id: wake-test
+        if: ${{ inputs.persistent_infra_test }}
+        run: |
+          if [ -z "${{ secrets.RUNNER_WAKE_URL_TEST }}" ]; then
+            echo "No test wake URL configured, skipping"
+            echo "needs_wait=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Waking up test runners..."
+          HTTP_STATUS=$(curl -s -o /tmp/wake-test-response.json -w "%{http_code}" \
+            -X POST \
+            -H "x-api-key: ${{ secrets.RUNNER_WAKE_API_KEY_TEST }}" \
+            "${{ secrets.RUNNER_WAKE_URL_TEST }}")
+
+          RESPONSE=$(cat /tmp/wake-test-response.json)
+          echo "Test runners response ($HTTP_STATUS): $RESPONSE"
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -gt 299 ]; then
+            echo "::error::Test wake API returned $HTTP_STATUS - runners may not be available"
+            exit 1
+          elif echo "$RESPONSE" | grep -q '"started":0'; then
+            echo "Test runners already active, no wait needed"
+            echo "needs_wait=false" >> $GITHUB_OUTPUT
+          else
+            echo "Test runners starting up, will wait for reconnect"
+            echo "needs_wait=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Wake up build runners
+        id: wake-build
+        if: ${{ inputs.persistent_infra_build }}
+        run: |
+          if [ -z "${{ secrets.RUNNER_WAKE_URL_BUILD }}" ]; then
+            echo "No build wake URL configured, skipping"
+            echo "needs_wait=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Waking up build runners..."
+          HTTP_STATUS=$(curl -s -o /tmp/wake-build-response.json -w "%{http_code}" \
+            -X POST \
+            -H "x-api-key: ${{ secrets.RUNNER_WAKE_API_KEY_BUILD }}" \
+            "${{ secrets.RUNNER_WAKE_URL_BUILD }}")
+
+          RESPONSE=$(cat /tmp/wake-build-response.json)
+          echo "Build runners response ($HTTP_STATUS): $RESPONSE"
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -gt 299 ]; then
+            echo "::error::Build wake API returned $HTTP_STATUS - runners may not be available"
+            exit 1
+          elif echo "$RESPONSE" | grep -q '"started":0'; then
+            echo "Build runners already active, no wait needed"
+            echo "needs_wait=false" >> $GITHUB_OUTPUT
+          else
+            echo "Build runners starting up, will wait for reconnect"
+            echo "needs_wait=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Wait for runners to reconnect
+        if: steps.wake-test.outputs.needs_wait == 'true' || steps.wake-build.outputs.needs_wait == 'true'
+        run: |
+          echo "Waiting 45s for runners to resume from hibernate and reconnect..."
+          sleep 45
+          echo "Done"
+
+  check-still-needed:
+    runs-on: ubuntu-latest
+    outputs:
+      filtered_matrix: ${{ steps.recheck.outputs.filtered_matrix }}
+      filtered_apps: ${{ steps.recheck.outputs.filtered_apps }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Identify and check which apps need processing
+        id: recheck
+        uses: Traventia/ci-templates/.github/actions/identify-and-check-apps@main
+        with:
+          apps: ${{ inputs.apps || '' }}
+          environment: ${{ inputs.environment }}
+          branch: ${{ github.head_ref || github.ref_name }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
+
+      - name: Log results
+        shell: bash
+        run: |
+          echo "Filtered apps: ${{ steps.recheck.outputs.filtered_apps }}"
+          echo "Filtered matrix: ${{ steps.recheck.outputs.filtered_matrix }}"
+          if [ -z "${{ steps.recheck.outputs.filtered_apps }}" ]; then
+            echo "No apps need deployment. Pipeline will skip remaining jobs."
+          fi
+
+      - name: Mark apps as PROCESSING
+        if: ${{ steps.recheck.outputs.filtered_apps != '' }}
+        uses: Traventia/ci-templates/.github/actions/mark-pipeline-status@main
+        with:
+          apps: ${{ steps.recheck.outputs.filtered_apps }}
+          commit-id: ${{ github.sha }}
+          environment: ${{ inputs.environment }}
+          status: PROCESSING
+          branch: ${{ github.head_ref || github.ref_name }}
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+
+  unit-tests:
+    runs-on: ${{ fromJson(inputs.test_runner_labels) }}
+    needs: [check-still-needed, wake-runners]
+    if: ${{ !inputs.skip_tests && !cancelled() && !failure() && needs.check-still-needed.outputs.filtered_matrix != '[]' && needs.check-still-needed.outputs.filtered_matrix != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.check-still-needed.outputs.filtered_matrix) }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js ${{ inputs.node_version }}
+        if: ${{ !inputs.persistent_infra_test }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Cache node modules
+        if: ${{ !inputs.persistent_infra_test }}
+        id: cache-npm
+        uses: actions/cache@v3
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-
+
+      - name: Install dependencies
+        if: ${{ !inputs.persistent_infra_test && steps.cache-npm.outputs.cache-hit != 'true' }}
+        run: make install
+
+      - name: Install dependencies (self-hosted)
+        if: ${{ inputs.persistent_infra_test }}
+        run: npm install
+
+      - name: Execute unit tests for ${{ matrix.app }}
+        run: make test ${{ matrix.app }}
+
+  integration-tests:
+    runs-on: ${{ fromJson(inputs.test_runner_labels) }}
+    needs: [check-still-needed, wake-runners]
+    if: ${{ !inputs.skip_integration_tests && !cancelled() && !failure() && needs.check-still-needed.outputs.filtered_matrix != '[]' && needs.check-still-needed.outputs.filtered_matrix != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.check-still-needed.outputs.filtered_matrix) }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js ${{ inputs.node_version }}
+        if: ${{ !inputs.persistent_infra_test }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Cache node modules
+        if: ${{ !inputs.persistent_infra_test }}
+        id: cache-npm
+        uses: actions/cache@v3
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-
+
+      - name: Install dependencies
+        if: ${{ !inputs.persistent_infra_test && steps.cache-npm.outputs.cache-hit != 'true' }}
+        run: make install
+
+      - name: Install dependencies (self-hosted)
+        if: ${{ inputs.persistent_infra_test }}
+        run: npm install
+
+      - name: Install infrastructure dependencies
+        if: ${{ !inputs.persistent_infra_test }}
+        run: make install-infra-deps
+
+      - name: Check infrastructure health
+        if: ${{ inputs.persistent_infra_test }}
+        run: make check-infra-health
+
+      - name: Execute integration tests for ${{ matrix.app }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: make test-i ${{ matrix.app }}
+
+  build:
+    runs-on: ${{ fromJson(inputs.build_runner_labels) }}
+    needs: [check-still-needed, wake-runners]
+    if: ${{ !inputs.skip_build && !cancelled() && !failure() && needs.check-still-needed.outputs.filtered_matrix != '[]' && needs.check-still-needed.outputs.filtered_matrix != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.check-still-needed.outputs.filtered_matrix) }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        if: ${{ !inputs.persistent_infra_build }}
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+
+      - name: Set AWS region for instance role
+        if: ${{ inputs.persistent_infra_build }}
+        shell: bash
+        run: |
+          echo "AWS_REGION=${{ secrets.AWS_CI_BUCKET_REGION }}" >> $GITHUB_ENV
+          echo "AWS_DEFAULT_REGION=${{ secrets.AWS_CI_BUCKET_REGION }}" >> $GITHUB_ENV
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image for ${{ matrix.app }}
+        uses: Traventia/ci-templates/.github/actions/build-and-push@main
+        with:
+          apps: ${{ matrix.app }}
+          ecr_registry: ${{ steps.login-ecr.outputs.registry }}
+          image_tag: ${{ github.sha }}
+          npm_token: ${{ secrets.NPM_AUTH_TOKEN }}
+          is_bc: ${{ inputs.is_bc }}
+          skip_push: ${{ inputs.skip_push }}
+          aws-access-key-id: ${{ !inputs.persistent_infra_build && secrets.AWS_ACCESS_KEY_ID || '' }}
+          aws-secret-access-key: ${{ !inputs.persistent_infra_build && secrets.AWS_SECRET_ACCESS_KEY || '' }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [check-still-needed, unit-tests, integration-tests, build]
+    if: ${{ !inputs.skip_deploy && !inputs.skip_push && !cancelled() && !failure() && needs.check-still-needed.outputs.filtered_matrix != '[]' && needs.check-still-needed.outputs.filtered_matrix != '' }}
+    concurrency:
+      group: deploy-${{ matrix.app }}-${{ inputs.environment }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.check-still-needed.outputs.filtered_matrix) }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Deploy ${{ matrix.app }} to Kubernetes
+        uses: Traventia/ci-templates/.github/actions/deploy-to-k8s@main
+        with:
+          apps: ${{ matrix.app }}
+          ecr_registry: ${{ steps.login-ecr.outputs.registry }}
+          image_tag: ${{ github.sha }}
+          k8s_user_token: ${{ secrets.EKS_I2_USER_TOKEN }}
+          k8s_ca: ${{ secrets.EKS_I2_CA }}
+          k8s_server_url: ${{ secrets.EKS_I2_URL }}
+          k8s_user_name: ${{ secrets.EKS_I2_USER_NAME }}
+          k8s_namespace: ${{ inputs.eks_namespace }}
+          is_bc: ${{ inputs.is_bc }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+          deploy_env: ${{ inputs.environment }}
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
+          branch: ${{ github.head_ref || github.ref_name }}
+
+  finalize-no-deploy:
+    runs-on: ubuntu-latest
+    needs: [check-still-needed, unit-tests, integration-tests, build]
+    if: ${{ (inputs.skip_deploy || inputs.skip_push) && !cancelled() && !failure() && needs.check-still-needed.outputs.filtered_apps != '' }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Mark pipeline records as SKIPPED
+        uses: Traventia/ci-templates/.github/actions/mark-pipeline-status@main
+        with:
+          apps: ${{ needs.check-still-needed.outputs.filtered_apps }}
+          commit-id: ${{ github.sha }}
+          environment: ${{ inputs.environment }}
+          status: SKIPPED
+          branch: ${{ github.head_ref || github.ref_name }}
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+
+  cleanup-on-failure:
+    runs-on: ubuntu-latest
+    needs: [check-still-needed, unit-tests, integration-tests, build, deploy, finalize-no-deploy]
+    if: ${{ failure() && needs.check-still-needed.outputs.filtered_apps != '' }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Mark failed apps as ERROR
+        uses: Traventia/ci-templates/.github/actions/mark-pipeline-status@main
+        with:
+          apps: ${{ needs.check-still-needed.outputs.filtered_apps }}
+          commit-id: ${{ github.sha }}
+          environment: ${{ inputs.environment }}
+          status: ERROR
+          branch: ${{ github.head_ref || github.ref_name }}
+          apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}

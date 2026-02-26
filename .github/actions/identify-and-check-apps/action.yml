@@ -1,0 +1,74 @@
+name: "Identify and Check Apps"
+description: "Identifies changed apps and checks if they still need deployment using pipeline-overview. Replaces the two-step identify + check pattern."
+inputs:
+  apps:
+    description: "Comma-separated list of apps to check. If empty, discovers all changed apps automatically (standalone mode)."
+    required: false
+    default: ""
+  environment:
+    description: "Environment to check (production or staging)"
+    required: false
+    default: "production"
+  aws-access-key-id:
+    description: "AWS Access Key ID"
+    required: true
+  aws-secret-access-key:
+    description: "AWS Secret Access Key"
+    required: true
+  aws-region:
+    description: "AWS Region where the S3 bucket is located"
+    required: false
+    default: "eu-west-1"
+  s3-bucket:
+    description: "S3 bucket name containing the ci-scripts.zip file"
+    required: true
+  apolo-api-token:
+    description: "API token for Apolo authentication"
+    required: false
+    default: ""
+  branch:
+    description: "Git branch name for branch-aware deploy checking"
+    required: false
+    default: ""
+outputs:
+  filtered_apps:
+    description: "Comma-separated list of apps that need deployment"
+    value: ${{ steps.check.outputs.filtered_apps }}
+  filtered_matrix:
+    description: "JSON array of apps that need deployment"
+    value: ${{ steps.check.outputs.filtered_matrix }}
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout CI Scripts
+      uses: Traventia/ci-templates/.github/actions/checkout-ci-scripts@main
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
+        s3-bucket: ${{ inputs.s3-bucket }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: "18"
+
+    - name: Identify and check which apps need deployment
+      id: check
+      shell: bash
+      working-directory: ci/scripts
+      env:
+        APPS: ${{ inputs.apps }}
+        APOLO_API_TOKEN: ${{ inputs.apolo-api-token }}
+        DEPLOY_BRANCH: ${{ inputs.branch }}
+      run: |
+        FILTERED=$(node identify_and_check_apps.js ${{ inputs.environment }})
+        echo "Filtered apps: $FILTERED"
+        echo "filtered_apps=${FILTERED}" >> $GITHUB_OUTPUT
+        if [ -z "$FILTERED" ]; then
+          echo "filtered_matrix=[]" >> $GITHUB_OUTPUT
+        else
+          MATRIX_JSON=$(echo "$FILTERED" | jq -R -c 'split(",") | map(select(length > 0))')
+          echo "Filtered matrix: $MATRIX_JSON"
+          echo "filtered_matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
+        fi
