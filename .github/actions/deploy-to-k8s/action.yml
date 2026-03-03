@@ -54,6 +54,10 @@ inputs:
     description: "Git branch name for branch-aware deployment tracking"
     required: false
     default: ""
+  gitops-token:
+    description: "GitHub token with write access to traventia-gitops repo (for ArgoCD deployments)"
+    required: false
+    default: ""
 runs:
   using: "composite"
   steps:
@@ -109,6 +113,7 @@ runs:
         GITHUB_CONTEXT: ${{ toJson(github) }}
         APOLO_API_TOKEN: ${{ inputs.apolo-api-token }}
         DEPLOY_BRANCH: ${{ inputs.branch }}
+        GITOPS_TOKEN: ${{ inputs.gitops-token }}
       run: |
         echo "Starting deployment process..."
         bash deploy_apps.sh ${{ inputs.apps }}

@@ -71,6 +71,8 @@ on:
         required: false
       EKS_I2_USER_NAME:
         required: false
+      GITOPS_TOKEN:
+        required: false
     outputs:
       apps_to_deploy:
         description: "Comma-separated list of applications that will be deployed"
@@ -248,3 +250,4 @@ jobs:
           deploy_env: ${{ inputs.environment }}
           is_bc: ${{ inputs.is_bc }}
           branch: ${{ github.head_ref || github.ref_name }}
+          gitops-token: ${{ secrets.GITOPS_TOKEN }}

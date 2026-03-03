@@ -101,6 +101,8 @@ on:
         required: false
       RUNNER_WAKE_API_KEY_BUILD:
         required: false
+      GITOPS_TOKEN:
+        required: false
     outputs:
       apps_to_deploy:
         description: 'Comma-separated list of applications that will be deployed'
@@ -458,6 +460,7 @@ jobs:
           deploy_env: ${{ inputs.environment }}
           apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
           branch: ${{ github.head_ref || github.ref_name }}
+          gitops-token: ${{ secrets.GITOPS_TOKEN }}
 
   finalize-no-deploy:
     runs-on: ubuntu-latest
