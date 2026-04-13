@@ -1,74 +1,74 @@
-name: 'TypeScript Services CI/CD (Matrix + Recheck + Split Runners)'
+name: "TypeScript Services CI/CD (Matrix + Recheck + Split Runners)"
 
 on:
   workflow_call:
     inputs:
       environment:
-        description: 'Environment to deploy (production or staging)'
+        description: "Environment to deploy (production or staging)"
         required: false
         type: string
-        default: 'production'
+        default: "production"
       apps:
-        description: 'Comma-separated list of apps to deploy. If not provided, app identification will be used'
+        description: "Comma-separated list of apps to deploy. If not provided, app identification will be used"
         required: false
         type: string
       eks_namespace:
-        description: 'EKS namespace for deployment'
+        description: "EKS namespace for deployment"
         required: false
         type: string
-        default: 'default'
+        default: "default"
       skip_tests:
-        description: 'Skip test execution'
+        description: "Skip test execution"
         required: false
         type: boolean
         default: false
       skip_integration_tests:
-        description: 'Skip integration test execution'
+        description: "Skip integration test execution"
         required: false
         type: boolean
         default: false
       skip_build:
-        description: 'Skip build step'
+        description: "Skip build step"
         required: false
         type: boolean
         default: false
       skip_push:
-        description: 'Skip pushing Docker images to ECR (build only)'
+        description: "Skip pushing Docker images to ECR (build only)"
         required: false
         type: boolean
         default: false
       skip_deploy:
-        description: 'Skip deploy step'
+        description: "Skip deploy step"
         required: false
         type: boolean
         default: false
       node_version:
-        description: 'Node.js version to use'
+        description: "Node.js version to use"
         required: false
         type: string
-        default: '20.x'
+        default: "20.x"
       is_bc:
-        description: 'Whether this is a BC build/deploy (1 for true, 0 for false)'
+        description: "Whether this is a BC build/deploy (1 for true, 0 for false)"
         required: false
         type: string
-        default: '0'
+        default: "0"
       test_runner_labels:
-        description: 'JSON array of runner labels for test jobs (unit + integration)'
+        description: "JSON array of runner labels for test jobs (unit + integration)"
         required: false
         type: string
         default: '["ubuntu-latest"]'
       build_runner_labels:
-        description: 'JSON array of runner labels for the build job'
+        description: "JSON array of runner labels for the build job"
         required: false
         type: string
         default: '["ubuntu-latest"]'
       persistent_infra_test:
-        description: 'Whether test runners have pre-installed infra services (skip docker compose, use health check instead)'
+        description: "Whether test runners have pre-installed infra services (skip docker compose, use health check instead)"
         required: false
         type: boolean
         default: false
       persistent_infra_build:
-        description: 'Whether build runners have Docker pre-installed (skip setup steps)'
+        description: "Whether build runners have Docker pre-installed (skip setup steps)"
         required: false
         type: boolean
         default: false
@@ -105,7 +105,7 @@ on:
         required: false
     outputs:
       apps_to_deploy:
-        description: 'Comma-separated list of applications that will be deployed'
+        description: "Comma-separated list of applications that will be deployed"
         value: ${{ jobs.check-still-needed.outputs.filtered_apps }}
 
 jobs:
@@ -176,8 +176,8 @@ jobs:
       - name: Wait for runners to reconnect
         if: steps.wake-test.outputs.needs_wait == 'true' || steps.wake-build.outputs.needs_wait == 'true'
         run: |
-          echo "Waiting 45s for runners to resume from hibernate and reconnect..."
-          sleep 45
+          echo "Waiting 100s for runners to resume from hibernate and reconnect..."
+          sleep 100
           echo "Done"
 
   identify-apps:
