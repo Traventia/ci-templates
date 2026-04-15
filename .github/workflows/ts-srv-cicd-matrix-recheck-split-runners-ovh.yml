@@ -171,8 +171,8 @@ jobs:
     needs: [identify-apps]
     if: ${{ needs.identify-apps.outputs.matrix != '[]' && needs.identify-apps.outputs.apps != '' }}
     outputs:
-      filtered_matrix: ${{ steps.recheck.outputs.filtered_matrix }}
-      filtered_apps: ${{ steps.recheck.outputs.filtered_apps }}
+      filtered_matrix: ${{ steps.result.outputs.filtered_matrix }}
+      filtered_apps: ${{ steps.result.outputs.filtered_apps }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -180,6 +180,7 @@ jobs:
 
       - name: Re-check which apps still need processing
         id: recheck
+        if: ${{ !inputs.apps }}
         uses: Traventia/ci-templates/.github/actions/check-deploy-needed@main
         with:
           apps: ${{ needs.identify-apps.outputs.apps }}
@@ -191,21 +192,38 @@ jobs:
           s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
           apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
 
+      - name: Resolve filtered apps (bypass recheck when apps input is explicit)
+        id: result
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.apps }}" ]; then
+            echo "Explicit apps provided via input, bypassing deploy-needed check"
+            APPS="${{ needs.identify-apps.outputs.apps }}"
+            MATRIX='${{ needs.identify-apps.outputs.matrix }}'
+          else
+            APPS="${{ steps.recheck.outputs.filtered_apps }}"
+            MATRIX='${{ steps.recheck.outputs.filtered_matrix }}'
+          fi
+          echo "filtered_apps=$APPS" >> $GITHUB_OUTPUT
+          echo "filtered_matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "Resolved apps: $APPS"
+          echo "Resolved matrix: $MATRIX"
+
       - name: Log re-check results
         shell: bash
         run: |
           echo "Original apps: ${{ needs.identify-apps.outputs.apps }}"
-          echo "Filtered apps: ${{ steps.recheck.outputs.filtered_apps }}"
-          echo "Filtered matrix: ${{ steps.recheck.outputs.filtered_matrix }}"
-          if [ -z "${{ steps.recheck.outputs.filtered_apps }}" ]; then
+          echo "Filtered apps: ${{ steps.result.outputs.filtered_apps }}"
+          echo "Filtered matrix: ${{ steps.result.outputs.filtered_matrix }}"
+          if [ -z "${{ steps.result.outputs.filtered_apps }}" ]; then
             echo "All apps already deployed. Pipeline will skip remaining jobs."
           fi
 
       - name: Mark apps as PROCESSING
-        if: ${{ steps.recheck.outputs.filtered_apps != '' }}
+        if: ${{ steps.result.outputs.filtered_apps != '' }}
         uses: Traventia/ci-templates/.github/actions/mark-pipeline-status@main
         with:
-          apps: ${{ steps.recheck.outputs.filtered_apps }}
+          apps: ${{ steps.result.outputs.filtered_apps }}
           commit-id: ${{ github.sha }}
           environment: ${{ inputs.environment }}
           status: PROCESSING
