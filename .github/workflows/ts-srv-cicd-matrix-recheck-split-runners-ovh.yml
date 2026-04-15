@@ -329,6 +329,11 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # Limita la concurrencia para evitar race conditions sobre la infra
+          # compartida (Mongo/MySQL/Redis). El servidor OVH tiene 16 vCPU, por
+          # lo que el 75% por defecto = 12 workers, demasiado para una unica
+          # instancia de Mongo/MySQL. 4 iguala al AWS c7i.xlarge.
+          JEST_MAX_WORKERS: "4"
         run: make test-i ${{ matrix.app }}
 
   build:
