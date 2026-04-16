@@ -1,0 +1,142 @@
+name: 'Build & Deploy (OVH)'
+
+# ============================================================
+#  Variante de ts-srv-build-deploy-selfhosted.yml para runners
+#  OVH bare-metal (siempre encendidos, sin wake/sleep).
+#
+#  Diferencias:
+#    - Sin job wake-build-runners ni secrets RUNNER_WAKE_*
+#    - AWS credentials siempre explicitas (no IAM role)
+# ============================================================
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Environment to deploy (production or staging)'
+        required: false
+        type: string
+        default: 'production'
+      apps:
+        description: 'Comma-separated list of apps to build and deploy'
+        required: true
+        type: string
+      eks_namespace:
+        description: 'EKS namespace for deployment'
+        required: false
+        type: string
+        default: 'default'
+      skip_deploy:
+        description: 'Skip deploy step'
+        required: false
+        type: boolean
+        default: false
+      skip_push:
+        description: 'Skip pushing Docker images to ECR (build only)'
+        required: false
+        type: boolean
+        default: false
+      is_bc:
+        description: 'BC build/deploy (1 for true, 0 for false)'
+        required: false
+        type: string
+        default: '0'
+      build_runner_labels:
+        description: 'JSON array of runner labels for the build job'
+        required: false
+        type: string
+        default: '["self-hosted", "ci-runner-build-ovh"]'
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_CI_BUCKET_REGION:
+        required: true
+      AWS_CI_BUCKET:
+        required: true
+      NPM_AUTH_TOKEN:
+        required: false
+      EKS_I2_USER_TOKEN:
+        required: false
+      EKS_I2_CA:
+        required: false
+      EKS_I2_URL:
+        required: false
+      EKS_I2_USER_NAME:
+        required: false
+
+jobs:
+  build:
+    runs-on: ${{ fromJson(inputs.build_runner_labels) }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        uses: Traventia/ci-templates/.github/actions/build-and-push@main
+        with:
+          apps: ${{ inputs.apps }}
+          ecr_registry: ${{ steps.login-ecr.outputs.registry }}
+          image_tag: ${{ github.sha }}
+          npm_token: ${{ secrets.NPM_AUTH_TOKEN }}
+          is_bc: ${{ inputs.is_bc }}
+          skip_push: ${{ inputs.skip_push }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: ${{ !inputs.skip_deploy && !inputs.skip_push && !cancelled() && !failure() }}
+    concurrency:
+      group: deploy-${{ inputs.apps }}-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Deploy to Kubernetes
+        uses: Traventia/ci-templates/.github/actions/deploy-to-k8s@main
+        with:
+          apps: ${{ inputs.apps }}
+          ecr_registry: ${{ steps.login-ecr.outputs.registry }}
+          image_tag: ${{ github.sha }}
+          k8s_user_token: ${{ secrets.EKS_I2_USER_TOKEN }}
+          k8s_ca: ${{ secrets.EKS_I2_CA }}
+          k8s_server_url: ${{ secrets.EKS_I2_URL }}
+          k8s_user_name: ${{ secrets.EKS_I2_USER_NAME }}
+          k8s_namespace: ${{ inputs.eks_namespace }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
+          s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
+          deploy_env: ${{ inputs.environment }}
+          is_bc: ${{ inputs.is_bc }}
+          branch: ${{ github.head_ref || github.ref_name }}
