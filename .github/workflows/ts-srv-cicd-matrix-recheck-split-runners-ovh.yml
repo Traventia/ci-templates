@@ -96,6 +96,11 @@ on:
         required: false
         type: boolean
         default: false
+      jest_max_workers:
+        description: "Jest maxWorkers override for integration tests (e.g. '4', '50%'). Default '4' to avoid race conditions on shared infra."
+        required: false
+        type: string
+        default: "4"
     secrets:
       AWS_ACCESS_KEY_ID:
         required: true
@@ -329,11 +334,7 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          # Limita la concurrencia para evitar race conditions sobre la infra
-          # compartida (Mongo/MySQL/Redis). El servidor OVH tiene 16 vCPU, por
-          # lo que el 75% por defecto = 12 workers, demasiado para una unica
-          # instancia de Mongo/MySQL. 4 iguala al AWS c7i.xlarge.
-          JEST_MAX_WORKERS: "4"
+          JEST_MAX_WORKERS: ${{ inputs.jest_max_workers }}
         run: make test-i ${{ matrix.app }}
 
   build:
