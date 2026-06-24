@@ -58,6 +58,10 @@ inputs:
     description: "GitHub token with write access to traventia-gitops repo (for ArgoCD deployments)"
     required: false
     default: ""
+  overlay_cluster:
+    description: "Target GitOps cluster (selects apps/<app>/overlays/<cluster>/<env>). Defaults to eks-i2 (production)."
+    required: false
+    default: "eks-i2"
 runs:
   using: "composite"
   steps:
@@ -108,6 +112,7 @@ runs:
         K8S_USER_NAME: ${{ inputs.k8s_user_name }}
         K8S_NS: ${{ inputs.k8s_namespace }}
         DEPLOY_ENV: ${{ inputs.deploy_env }}
+        DEPLOY_CLUSTER: ${{ inputs.overlay_cluster }}
         IS_BC: ${{ inputs.is_bc }}
         USER_CHANGE: ${{ github.actor }}
         GITHUB_CONTEXT: ${{ toJson(github) }}
