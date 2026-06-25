@@ -34,6 +34,10 @@ inputs:
     description: "Git branch name for branch-aware status tracking"
     required: false
     default: ""
+  github-token:
+    description: "GitHub token (github.token) para consultar qué etapas fallaron al notificar a Teams"
+    required: false
+    default: ""
 runs:
   using: "composite"
   steps:
@@ -56,6 +60,7 @@ runs:
       env:
         APOLO_API_TOKEN: ${{ inputs.apolo-api-token }}
         DEPLOY_BRANCH: ${{ inputs.branch }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
         IFS=',' read -r -a apps <<< "${{ inputs.apps }}"
         for app in "${apps[@]}"; do

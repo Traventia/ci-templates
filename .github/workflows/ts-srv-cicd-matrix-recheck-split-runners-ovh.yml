@@ -459,6 +459,7 @@ jobs:
           environment: ${{ inputs.environment }}
           status: ERROR
           branch: ${{ github.head_ref || github.ref_name }}
+          github-token: ${{ github.token }}
           apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
