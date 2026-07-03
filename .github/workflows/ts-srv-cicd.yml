@@ -52,6 +52,11 @@ on:
         required: false
         type: string
         default: "0"
+      overlay_cluster:
+        description: "Target GitOps cluster (selects apps/<app>/overlays/<cluster>/<env>). Defaults to eks-i2 (production)."
+        required: false
+        type: string
+        default: "eks-i2"
     secrets:
       AWS_ACCESS_KEY_ID:
         required: true
@@ -251,3 +256,4 @@ jobs:
           is_bc: ${{ inputs.is_bc }}
           branch: ${{ github.head_ref || github.ref_name }}
           gitops-token: ${{ secrets.GITOPS_TOKEN }}
+          overlay_cluster: ${{ inputs.overlay_cluster }}
