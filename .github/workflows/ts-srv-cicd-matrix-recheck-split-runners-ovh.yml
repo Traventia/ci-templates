@@ -66,6 +66,11 @@ on:
         required: false
         type: string
         default: "0"
+      overlay_cluster:
+        description: "Target GitOps cluster (selects apps/<app>/overlays/<cluster>/<env>). Defaults to eks-i2 (production)."
+        required: false
+        type: string
+        default: "eks-i2"
       test_runner_labels:
         description: "JSON array of runner labels for test jobs (fallback si no se especifican los de unit/integration)"
         required: false
@@ -422,6 +427,7 @@ jobs:
           apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
           branch: ${{ github.head_ref || github.ref_name }}
           gitops-token: ${{ secrets.GITOPS_TOKEN }}
+          overlay_cluster: ${{ inputs.overlay_cluster }}
 
   finalize-no-deploy:
     runs-on: ubuntu-latest
