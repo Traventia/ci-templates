@@ -52,11 +52,21 @@ runs:
         fi
         echo "Token OIDC disponible; se asumira el rol indicado."
 
+    # Los valores llegan por `env` y no interpolados en el propio script. Con
+    # `${{ }}` dentro de un `run:`, el valor se sustituye en el TEXTO del script
+    # antes de ejecutarlo, asi que deja de ser dato y pasa a ser codigo: basta
+    # un metacaracter de shell para salirse de las comillas. Por `env` lo recibe
+    # bash como variable y no puede ejecutarse. Ademas, si la comprobacion
+    # fallara por sintaxis, el error de bash imprimiria la linea — que con la
+    # interpolacion contendria la propia clave.
     - name: Check static key prerequisites
       if: inputs.role-to-assume == ''
       shell: bash
+      env:
+        AWS_ACCESS_KEY_ID_INPUT: ${{ inputs.aws-access-key-id }}
+        AWS_SECRET_ACCESS_KEY_INPUT: ${{ inputs.aws-secret-access-key }}
       run: |
-        if [ -z "${{ inputs.aws-access-key-id }}" ] || [ -z "${{ inputs.aws-secret-access-key }}" ]; then
+        if [ -z "$AWS_ACCESS_KEY_ID_INPUT" ] || [ -z "$AWS_SECRET_ACCESS_KEY_INPUT" ]; then
           echo "::error::No se ha pasado ni role-to-assume ni una pareja clave/secreto."
           echo "::error::Pasa 'aws_role_to_assume' con el ARN del rol de CI, o los secretos"
           echo "::error::AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY."
