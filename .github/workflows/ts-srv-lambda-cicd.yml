@@ -12,6 +12,14 @@ on:
         required: false
         type: string
         default: "eu-west-1"
+      aws_role_to_assume:
+        description: >-
+          ARN del rol de CI que asumir por OIDC. Si se pasa, no hacen falta los
+          secretos AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, y el job que llama
+          necesita `permissions: id-token: write` (ver README).
+        required: false
+        type: string
+        default: ""
       node_version:
         description: "Node.js version used for build and tests"
         required: false
@@ -59,9 +67,9 @@ on:
         default: false
     secrets:
       AWS_ACCESS_KEY_ID:
-        required: true
+        required: false
       AWS_SECRET_ACCESS_KEY:
-        required: true
+        required: false
       NPM_AUTH_TOKEN:
         required: false
     outputs:
@@ -133,6 +141,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build]
     if: ${{ !inputs.skip_deploy && !cancelled() && !failure() }}
+    permissions:
+      # id-token solo se concede si el workflow que LLAMA a esta plantilla lo
+      # declara tambien: un workflow reutilizable no puede ampliarse a si mismo.
+      # contents va explicito porque declarar `permissions` sustituye el
+      # conjunto por defecto en vez de ampliarlo, y sin el se rompe el checkout.
+      id-token: write
+      contents: read
     outputs:
       function_version: ${{ steps.publish.outputs.version }}
     steps:
@@ -143,8 +158,9 @@ jobs:
           path: artifact
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: Traventia/ci-templates/.github/actions/configure-aws@main
         with:
+          role-to-assume: ${{ inputs.aws_role_to_assume }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ inputs.aws_region }}

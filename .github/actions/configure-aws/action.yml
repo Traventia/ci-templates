@@ -1,0 +1,83 @@
+name: "Configure AWS credentials"
+description: "Authenticates to AWS via GitHub OIDC when a role is given, or falls back to a static access key."
+
+# Único punto del repositorio donde se configuran credenciales de AWS.
+#
+# Existe para que la migración de la clave estática a OIDC sea un cambio de
+# entrada y no una reescritura: quien pasa `role-to-assume` va por OIDC, quien
+# pasa la clave sigue como siempre, y las dos formas conviven mientras los
+# repositorios consumidores migran uno a uno.
+#
+# OJO: este repositorio es PÚBLICO. El ARN del rol no se escribe aquí, llega
+# como input desde el workflow que llama.
+
+inputs:
+  role-to-assume:
+    description: >-
+      ARN del rol que asumir por OIDC. Si viene vacío se usan la clave y el
+      secreto. Requiere que el job tenga permiso `id-token: write`.
+    required: false
+    default: ""
+  aws-access-key-id:
+    description: "Clave de acceso. Solo se usa si role-to-assume viene vacío."
+    required: false
+    default: ""
+  aws-secret-access-key:
+    description: "Secreto de la clave. Solo se usa si role-to-assume viene vacío."
+    required: false
+    default: ""
+  aws-region:
+    description: "Región de AWS."
+    required: false
+    default: "eu-west-1"
+
+runs:
+  using: "composite"
+  steps:
+    # Sin esto, olvidarse de `id-token: write` produce un error de la acción de
+    # AWS que no menciona los permisos por ningún lado y manda a leer sobre STS.
+    # Es el fallo más probable de toda la migración: el permiso lo concede el
+    # workflow que LLAMA, no el reutilizable, así que hay que declararlo en cada
+    # repositorio consumidor.
+    - name: Check OIDC prerequisites
+      if: inputs.role-to-assume != ''
+      shell: bash
+      run: |
+        if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+          echo "::error::Se ha pasado role-to-assume pero este job no puede pedir un token OIDC."
+          echo "::error::Falta 'permissions: id-token: write' en el workflow que llama a la plantilla."
+          echo "::error::Declarar 'permissions' SUSTITUYE el conjunto por defecto, asi que hay que"
+          echo "::error::incluir tambien 'contents: read' o actions/checkout dejara de funcionar."
+          exit 1
+        fi
+        echo "Token OIDC disponible; se asumira el rol indicado."
+
+    - name: Check static key prerequisites
+      if: inputs.role-to-assume == ''
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.aws-access-key-id }}" ] || [ -z "${{ inputs.aws-secret-access-key }}" ]; then
+          echo "::error::No se ha pasado ni role-to-assume ni una pareja clave/secreto."
+          echo "::error::Pasa 'aws_role_to_assume' con el ARN del rol de CI, o los secretos"
+          echo "::error::AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY."
+          exit 1
+        fi
+
+    # El nombre de sesión llega a CloudTrail, así que se puede ver de un vistazo
+    # qué repositorio está detrás de cada llamada. Durante la migración es la
+    # forma de comprobar quién ha pasado ya a OIDC sin preguntar a nadie.
+    - name: Configure AWS credentials (OIDC)
+      if: inputs.role-to-assume != ''
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.role-to-assume }}
+        role-session-name: ci-${{ github.event.repository.name }}-${{ github.run_id }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Configure AWS credentials (static key)
+      if: inputs.role-to-assume == ''
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
