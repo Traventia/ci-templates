@@ -141,13 +141,17 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build]
     if: ${{ !inputs.skip_deploy && !cancelled() && !failure() }}
-    permissions:
-      # id-token solo se concede si el workflow que LLAMA a esta plantilla lo
-      # declara tambien: un workflow reutilizable no puede ampliarse a si mismo.
-      # contents va explicito porque declarar `permissions` sustituye el
-      # conjunto por defecto en vez de ampliarlo, y sin el se rompe el checkout.
-      id-token: write
-      contents: read
+    # SIN bloque `permissions` a proposito, y es importante que siga sin estarlo.
+    #
+    # Un workflow reutilizable hereda los permisos de quien lo llama y no puede
+    # ampliarlos. Declarar aqui `id-token: write` haria que la ejecucion fallase
+    # entera —"is requesting 'id-token: write', but is only allowed
+    # 'id-token: none'"— para cualquier consumidor que no lo declare por su
+    # cuenta, que hoy son 52 de los 53 que hay.
+    #
+    # Al no declarar nada, se hereda: quien no pida id-token sigue con la clave
+    # estatica sin enterarse, y quien lo pida obtiene OIDC. Esa es toda la
+    # convivencia.
     outputs:
       function_version: ${{ steps.publish.outputs.version }}
     steps:
