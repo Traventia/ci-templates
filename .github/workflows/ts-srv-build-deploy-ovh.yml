@@ -46,11 +46,19 @@ on:
         required: false
         type: string
         default: '["self-hosted", "ci-runner-build-ovh"]'
+      aws_role_to_assume:
+        description: >-
+          ARN del rol de CI que asumir por OIDC. Si se pasa, no hacen falta los
+          secretos AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, y el workflow que
+          llama necesita `permissions: id-token: write`.
+        required: false
+        type: string
+        default: ""
     secrets:
       AWS_ACCESS_KEY_ID:
-        required: true
+        required: false
       AWS_SECRET_ACCESS_KEY:
-        required: true
+        required: false
       AWS_CI_BUCKET_REGION:
         required: true
       AWS_CI_BUCKET:
@@ -75,8 +83,9 @@ jobs:
           fetch-depth: 0
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: Traventia/ci-templates/.github/actions/configure-aws@main
         with:
+          role-to-assume: ${{ inputs.aws_role_to_assume }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
@@ -94,6 +103,7 @@ jobs:
           npm_token: ${{ secrets.NPM_AUTH_TOKEN }}
           is_bc: ${{ inputs.is_bc }}
           skip_push: ${{ inputs.skip_push }}
+          role-to-assume: ${{ inputs.aws_role_to_assume }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
@@ -112,8 +122,9 @@ jobs:
           fetch-depth: 0
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: Traventia/ci-templates/.github/actions/configure-aws@main
         with:
+          role-to-assume: ${{ inputs.aws_role_to_assume }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-1
@@ -133,6 +144,7 @@ jobs:
           k8s_server_url: ${{ secrets.EKS_I2_URL }}
           k8s_user_name: ${{ secrets.EKS_I2_USER_NAME }}
           k8s_namespace: ${{ inputs.eks_namespace }}
+          role-to-assume: ${{ inputs.aws_role_to_assume }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
