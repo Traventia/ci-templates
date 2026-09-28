@@ -3,6 +3,10 @@ description: "Downloads and extracts ci-scripts.zip from S3 to ci/scripts direct
 author: "Traventia"
 
 inputs:
+  role-to-assume:
+    description: "ARN del rol de CI a asumir por OIDC. Si viene, no se usan clave ni secreto."
+    required: false
+    default: ''
   aws-access-key-id:
     description: "AWS Access Key ID (optional on EC2 instances with IAM role)"
     required: false
@@ -22,20 +26,19 @@ inputs:
 runs:
   using: "composite"
   steps:
+    # Los tres modos —OIDC, clave estatica y rol de instancia del runner— viven
+    # ahora en configure-aws. `allow-instance-role: true` conserva el
+    # comportamiento que tenia esta accion: sin clave, no fallar y dejar que el
+    # rol de instancia EC2 del runner ponga las credenciales, que es de lo que
+    # dependen los jobs con `persistent_infra_build`.
     - name: Configure AWS credentials
-      if: ${{ inputs.aws-access-key-id != '' }}
-      uses: aws-actions/configure-aws-credentials@v4
+      uses: Traventia/ci-templates/.github/actions/configure-aws@main
       with:
+        role-to-assume: ${{ inputs.role-to-assume }}
         aws-access-key-id: ${{ inputs.aws-access-key-id }}
         aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
         aws-region: ${{ inputs.aws-region }}
-
-    - name: Set AWS region for instance role
-      if: ${{ inputs.aws-access-key-id == '' }}
-      shell: bash
-      run: |
-        echo "AWS_REGION=${{ inputs.aws-region }}" >> $GITHUB_ENV
-        echo "AWS_DEFAULT_REGION=${{ inputs.aws-region }}" >> $GITHUB_ENV
+        allow-instance-role: "true"
 
     - name: Get remote content hash from S3 metadata
       id: remote-hash
