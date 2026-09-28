@@ -17,6 +17,10 @@ inputs:
   apolo-api-token:
     description: "API token for Apolo authentication"
     required: true
+  role-to-assume:
+    description: "ARN del rol de CI a asumir por OIDC. Se reenvia a checkout-ci-scripts."
+    required: false
+    default: ''
   aws-access-key-id:
     description: "AWS Access Key ID"
     required: true
@@ -40,6 +44,7 @@ runs:
     - name: Checkout CI Scripts
       uses: Traventia/ci-templates/.github/actions/checkout-ci-scripts@main
       with:
+        role-to-assume: ${{ inputs.role-to-assume }}
         aws-access-key-id: ${{ inputs.aws-access-key-id }}
         aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
         aws-region: ${{ inputs.aws-region }}

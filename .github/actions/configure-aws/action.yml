@@ -1,5 +1,5 @@
 name: "Configure AWS credentials"
-description: "Authenticates to AWS via GitHub OIDC when a role is given, or falls back to a static access key."
+description: "Authenticates to AWS via GitHub OIDC, a static access key, or the runner's own instance role."
 
 # Único punto del repositorio donde se configuran credenciales de AWS.
 #
@@ -7,6 +7,13 @@ description: "Authenticates to AWS via GitHub OIDC when a role is given, or fall
 # entrada y no una reescritura: quien pasa `role-to-assume` va por OIDC, quien
 # pasa la clave sigue como siempre, y las dos formas conviven mientras los
 # repositorios consumidores migran uno a uno.
+#
+# Hay un TERCER modo, y no es opcional: algunos jobs en runners self-hosted se
+# apoyan en el rol de instancia EC2 del propio runner y llaman sin clave a
+# propósito (`persistent_infra_build` en las plantillas selfhosted y de split
+# runners). Para esos hay que pasar `allow-instance-role: true`, o la acción
+# falla al no encontrar credenciales — que es justo lo que debe hacer cuando
+# nadie ha pedido ese modo.
 #
 # OJO: este repositorio es PÚBLICO. El ARN del rol no se escribe aquí, llega
 # como input desde el workflow que llama.
@@ -30,6 +37,13 @@ inputs:
     description: "Región de AWS."
     required: false
     default: "eu-west-1"
+  allow-instance-role:
+    description: >-
+      Poner a "true" cuando el job corre en un runner cuyo rol de instancia EC2
+      ya da las credenciales. Sin rol ni clave y con esto en "false", la acción
+      falla en vez de seguir a ciegas.
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -59,17 +73,23 @@ runs:
     # bash como variable y no puede ejecutarse. Ademas, si la comprobacion
     # fallara por sintaxis, el error de bash imprimiria la linea — que con la
     # interpolacion contendria la propia clave.
-    - name: Check static key prerequisites
+    - name: Check credentials are available
       if: inputs.role-to-assume == ''
       shell: bash
       env:
         AWS_ACCESS_KEY_ID_INPUT: ${{ inputs.aws-access-key-id }}
         AWS_SECRET_ACCESS_KEY_INPUT: ${{ inputs.aws-secret-access-key }}
+        ALLOW_INSTANCE_ROLE: ${{ inputs.allow-instance-role }}
       run: |
-        if [ -z "$AWS_ACCESS_KEY_ID_INPUT" ] || [ -z "$AWS_SECRET_ACCESS_KEY_INPUT" ]; then
+        if [ -n "$AWS_ACCESS_KEY_ID_INPUT" ] && [ -z "$AWS_SECRET_ACCESS_KEY_INPUT" ]; then
+          echo "::error::Se ha pasado aws-access-key-id sin aws-secret-access-key."
+          exit 1
+        fi
+        if [ -z "$AWS_ACCESS_KEY_ID_INPUT" ] && [ "$ALLOW_INSTANCE_ROLE" != "true" ]; then
           echo "::error::No se ha pasado ni role-to-assume ni una pareja clave/secreto."
           echo "::error::Pasa 'aws_role_to_assume' con el ARN del rol de CI, o los secretos"
-          echo "::error::AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY."
+          echo "::error::AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY. Si este job corre en un"
+          echo "::error::runner con rol de instancia, pasa allow-instance-role: true."
           exit 1
         fi
 
@@ -85,9 +105,21 @@ runs:
         aws-region: ${{ inputs.aws-region }}
 
     - name: Configure AWS credentials (static key)
-      if: inputs.role-to-assume == ''
+      if: inputs.role-to-assume == '' && inputs.aws-access-key-id != ''
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-access-key-id: ${{ inputs.aws-access-key-id }}
         aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
         aws-region: ${{ inputs.aws-region }}
+
+    # Nada que configurar: las credenciales ya están en la máquina. Solo hace
+    # falta que el SDK sepa contra qué región hablar.
+    - name: Use the runner's instance role
+      if: inputs.role-to-assume == '' && inputs.aws-access-key-id == ''
+      shell: bash
+      env:
+        AWS_REGION_INPUT: ${{ inputs.aws-region }}
+      run: |
+        echo "AWS_REGION=$AWS_REGION_INPUT" >> "$GITHUB_ENV"
+        echo "AWS_DEFAULT_REGION=$AWS_REGION_INPUT" >> "$GITHUB_ENV"
+        echo "Sin rol ni clave: se usaran las credenciales del rol de instancia del runner."
