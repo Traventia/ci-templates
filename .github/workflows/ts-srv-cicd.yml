@@ -57,11 +57,19 @@ on:
         required: false
         type: string
         default: "eks-i2"
+      aws_role_to_assume:
+        description: >-
+          ARN del rol de CI que asumir por OIDC. Si se pasa, no hacen falta los
+          secretos AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, y el workflow que
+          llama necesita `permissions: id-token: write` (ver README).
+        required: false
+        type: string
+        default: ""
     secrets:
       AWS_ACCESS_KEY_ID:
-        required: true
+        required: false
       AWS_SECRET_ACCESS_KEY:
-        required: true
+        required: false
       AWS_CI_BUCKET_REGION:
         required: true
       AWS_CI_BUCKET:
@@ -100,6 +108,7 @@ jobs:
         with:
           environment: ${{ inputs.environment }}
           branch: ${{ github.head_ref || github.ref_name }}
+          role-to-assume: ${{ inputs.aws_role_to_assume }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
@@ -193,15 +202,16 @@ jobs:
           fetch-depth: 0
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: Traventia/ci-templates/.github/actions/configure-aws@main
         with:
+          role-to-assume: ${{ inputs.aws_role_to_assume }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-1
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push Docker images
         uses: Traventia/ci-templates/.github/actions/build-and-push@main
@@ -210,6 +220,7 @@ jobs:
           ecr_registry: ${{ steps.login-ecr.outputs.registry }}
           image_tag: ${{ github.sha }}
           npm_token: ${{ secrets.NPM_AUTH_TOKEN }}
+          role-to-assume: ${{ inputs.aws_role_to_assume }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
@@ -227,15 +238,16 @@ jobs:
           fetch-depth: 0
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: Traventia/ci-templates/.github/actions/configure-aws@main
         with:
+          role-to-assume: ${{ inputs.aws_role_to_assume }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-1
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Deploy to Kubernetes
         uses: Traventia/ci-templates/.github/actions/deploy-to-k8s@main
@@ -248,6 +260,7 @@ jobs:
           k8s_server_url: ${{ secrets.EKS_I2_URL }}
           k8s_user_name: ${{ secrets.EKS_I2_USER_NAME }}
           k8s_namespace: ${{ inputs.eks_namespace }}
+          role-to-assume: ${{ inputs.aws_role_to_assume }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
