@@ -40,6 +40,10 @@ inputs:
     description: "Skip pushing images to ECR (build only)"
     required: false
     default: "false"
+  node_version:
+    description: "Node.js image tag passed to docker build as NODE_VERSION (e.g. 20.14). Empty keeps the Dockerfile default"
+    required: false
+    default: ""
 runs:
   using: "composite"
   steps:
@@ -59,6 +63,7 @@ runs:
         IMAGE_TAG: ${{ inputs.image_tag }}
         NPM_TOKEN: ${{ inputs.npm_token }}
         IS_BC: ${{ inputs.is_bc }}
+        NODE_VERSION: ${{ inputs.node_version }}
         NOPUSH: ${{ inputs.skip_push == 'true' && '1' || '0' }}
       run: |
         make build-ci

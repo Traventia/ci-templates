@@ -57,10 +57,15 @@ on:
         type: boolean
         default: false
       node_version:
-        description: "Node.js version to use"
+        description: "Default Node.js version, for tests and for the Docker image of every app not listed in node_versions"
         required: false
         type: string
-        default: "20.x"
+        default: "20.14"
+      node_versions:
+        description: 'Per-app Node.js version override as a JSON map, e.g. {"system":"20.20.2"}. Apps not listed use node_version'
+        required: false
+        type: string
+        default: "{}"
       is_bc:
         description: "Whether this is a BC build/deploy (1 for true, 0 for false)"
         required: false
@@ -268,11 +273,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Use Node.js ${{ inputs.node_version }}
+      - name: Use Node.js ${{ fromJson(inputs.node_versions)[matrix.app] || inputs.node_version }}
         if: ${{ !inputs.persistent_infra_test }}
         uses: actions/setup-node@v3
         with:
-          node-version: ${{ inputs.node_version }}
+          node-version: ${{ fromJson(inputs.node_versions)[matrix.app] || inputs.node_version }}
 
       - name: Cache node modules
         if: ${{ !inputs.persistent_infra_test }}
@@ -282,10 +287,9 @@ jobs:
           cache-name: cache-node-modules
         with:
           path: node_modules
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ runner.os }}-node-${{ fromJson(inputs.node_versions)[matrix.app] || inputs.node_version }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-build-${{ env.cache-name }}-
-            ${{ runner.os }}-
+            ${{ runner.os }}-node-${{ fromJson(inputs.node_versions)[matrix.app] || inputs.node_version }}-build-${{ env.cache-name }}-
 
       - name: Install dependencies
         if: ${{ !inputs.persistent_infra_test && steps.cache-npm.outputs.cache-hit != 'true' }}
@@ -311,11 +315,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Use Node.js ${{ inputs.node_version }}
+      - name: Use Node.js ${{ fromJson(inputs.node_versions)[matrix.app] || inputs.node_version }}
         if: ${{ !inputs.persistent_infra_test }}
         uses: actions/setup-node@v3
         with:
-          node-version: ${{ inputs.node_version }}
+          node-version: ${{ fromJson(inputs.node_versions)[matrix.app] || inputs.node_version }}
 
       - name: Cache node modules
         if: ${{ !inputs.persistent_infra_test }}
@@ -325,10 +329,9 @@ jobs:
           cache-name: cache-node-modules
         with:
           path: node_modules
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ runner.os }}-node-${{ fromJson(inputs.node_versions)[matrix.app] || inputs.node_version }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-build-${{ env.cache-name }}-
-            ${{ runner.os }}-
+            ${{ runner.os }}-node-${{ fromJson(inputs.node_versions)[matrix.app] || inputs.node_version }}-build-${{ env.cache-name }}-
 
       - name: Install dependencies
         if: ${{ !inputs.persistent_infra_test && steps.cache-npm.outputs.cache-hit != 'true' }}
@@ -387,6 +390,7 @@ jobs:
           npm_token: ${{ secrets.NPM_AUTH_TOKEN }}
           is_bc: ${{ inputs.is_bc }}
           skip_push: ${{ inputs.skip_push }}
+          node_version: ${{ fromJson(inputs.node_versions)[matrix.app] || inputs.node_version }}
           role-to-assume: ${{ inputs.aws_role_to_assume }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
