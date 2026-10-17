@@ -31,6 +31,7 @@ Esta GitHub Action construye y pushea imágenes Docker para aplicaciones especif
 | `aws-region`            | Región AWS donde está el bucket S3               | ❌        | `eu-west-1` |
 | `s3-bucket`             | Nombre del bucket S3 que contiene ci-scripts.zip | ✅        |             |
 | `is_bc`                 | Si es un build BC (1 para true, 0 para false)    | ❌        | `0`         |
+| `node_version`          | Tag de Node de la imagen (`NODE_VERSION` del Dockerfile); vacío = el default del Dockerfile | ❌ | `""` |
 
 ## Funcionamiento
 
@@ -54,6 +55,7 @@ Esta GitHub Action construye y pushea imágenes Docker para aplicaciones especif
 - `IMAGE_TAG`: Tag de la imagen
 - `NPM_TOKEN`: Token NPM (opcional)
 - `IS_BC`: Flag para builds BC
+- `NODE_VERSION`: Tag de Node de la imagen (opcional)
 
 ## Secrets requeridos
 
