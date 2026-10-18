@@ -101,6 +101,11 @@ on:
         required: false
         type: boolean
         default: false
+      setup_node_on_persistent_runners:
+        description: "Install node_version with setup-node for tests even when persistent_infra_test is true. Default false: the tests use the runner's system Node"
+        required: false
+        type: boolean
+        default: false
       persistent_infra_build:
         description: "Whether build runners have Docker pre-installed (skip setup steps)"
         required: false
@@ -274,7 +279,7 @@ jobs:
           fetch-depth: 0
 
       - name: Use Node.js ${{ fromJson(inputs.node_versions)[matrix.app] || inputs.node_version }}
-        if: ${{ !inputs.persistent_infra_test }}
+        if: ${{ !inputs.persistent_infra_test || inputs.setup_node_on_persistent_runners }}
         uses: actions/setup-node@v3
         with:
           node-version: ${{ fromJson(inputs.node_versions)[matrix.app] || inputs.node_version }}
@@ -316,7 +321,7 @@ jobs:
           fetch-depth: 0
 
       - name: Use Node.js ${{ fromJson(inputs.node_versions)[matrix.app] || inputs.node_version }}
-        if: ${{ !inputs.persistent_infra_test }}
+        if: ${{ !inputs.persistent_infra_test || inputs.setup_node_on_persistent_runners }}
         uses: actions/setup-node@v3
         with:
           node-version: ${{ fromJson(inputs.node_versions)[matrix.app] || inputs.node_version }}
