@@ -1,17 +1,16 @@
 name: "TypeScript Services CI/CD (Matrix + Recheck + Split Runners OVH)"
 
 # ============================================================
-#  Variante del workflow split-runners para los runners alojados
+#  CI/CD con runners separados para build y tests, alojados
 #  en el servidor OVH (ci-runner-*-ovh-*).
 #
-#  Diferencias respecto a ts-srv-cicd-matrix-recheck-split-runners.yml:
-#    1) Split fino: los jobs unit-tests e integration-tests pueden
-#       usar labels distintos (inputs unit_runner_labels e
-#       integration_runner_labels). Si alguno no se especifica,
-#       cae en test_runner_labels (retrocompatibilidad).
-#    2) Se elimina el job wake-runners y sus secrets RUNNER_WAKE_*
-#       porque el host OVH esta siempre encendido (no hay
-#       hibernacion ni lambdas de wake).
+#  Los jobs unit-tests e integration-tests pueden usar labels
+#  distintos (inputs unit_runner_labels e
+#  integration_runner_labels). Si alguno no se especifica, cae
+#  en test_runner_labels (retrocompatibilidad).
+#
+#  El host OVH esta siempre encendido: no hay job de wake ni
+#  secrets RUNNER_WAKE_*.
 # ============================================================
 
 on:

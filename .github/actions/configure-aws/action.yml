@@ -8,12 +8,13 @@ description: "Authenticates to AWS via GitHub OIDC, a static access key, or the 
 # pasa la clave sigue como siempre, y las dos formas conviven mientras los
 # repositorios consumidores migran uno a uno.
 #
-# Hay un TERCER modo, y no es opcional: algunos jobs en runners self-hosted se
-# apoyan en el rol de instancia EC2 del propio runner y llaman sin clave a
-# propósito (`persistent_infra_build` en las plantillas selfhosted y de split
-# runners). Para esos hay que pasar `allow-instance-role: true`, o la acción
-# falla al no encontrar credenciales — que es justo lo que debe hacer cuando
-# nadie ha pedido ese modo.
+# Hay un TERCER modo: el rol de instancia EC2 del propio runner, sin clave. Lo
+# usaban los runners self-hosted de AWS, ya retirados; ninguna plantilla actual
+# lo necesita (los runners OVH no tienen rol de instancia). Se conserva para no
+# cambiar el comportamiento de la CI activa mientras `checkout-ci-scripts` lo
+# siga pasando. Sin `allow-instance-role: true`, la acción falla al no
+# encontrar credenciales — que es justo lo que debe hacer cuando nadie ha
+# pedido ese modo.
 #
 # OJO: este repositorio es PÚBLICO. El ARN del rol no se escribe aquí, llega
 # como input desde el workflow que llama.
