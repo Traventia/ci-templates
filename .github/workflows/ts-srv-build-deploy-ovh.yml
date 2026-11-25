@@ -1,12 +1,12 @@
 name: 'Build & Deploy (OVH)'
 
 # ============================================================
-#  Variante de ts-srv-build-deploy-selfhosted.yml para runners
-#  OVH bare-metal (siempre encendidos, sin wake/sleep).
+#  Build y deploy de las apps indicadas en los runners OVH
+#  bare-metal, siempre encendidos (no hay wake/sleep ni
+#  secrets RUNNER_WAKE_*).
 #
-#  Diferencias:
-#    - Sin job wake-build-runners ni secrets RUNNER_WAKE_*
-#    - AWS credentials siempre explicitas (no IAM role)
+#  Credenciales de AWS: por OIDC (input aws_role_to_assume) o
+#  con clave estatica (los hosts OVH no tienen rol de instancia).
 # ============================================================
 
 on:
