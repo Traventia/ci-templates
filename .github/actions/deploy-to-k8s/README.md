@@ -45,15 +45,14 @@ Esta GitHub Action despliega aplicaciones en un cluster de Kubernetes. Utiliza l
 | `is_bc`                 | Si es un despliegue BC (1 para true, 0 para false) | ❌        | `0`          |
 | `gitops-app-id`         | App ID de la GitHub App con escritura en gitops    | ❌        | `""`         |
 | `gitops-app-private-key`| Clave privada (PEM) de esa app                     | ❌        | `""`         |
-| `gitops-token`          | Token con escritura en gitops (plan B)             | ❌        | `""`         |
 
 ## Credenciales de gitops
 
 Si llegan `gitops-app-id` y `gitops-app-private-key`, la action genera en cada ejecución un token
 de instalación de la app con `actions/create-github-app-token`, acotado a `traventia-gitops` y con
-solo `contents: write`, y se lo pasa a `deploy_apps.sh` como `GITOPS_TOKEN`. Si falta alguno, usa
-`gitops-token`, como antes. Si la generación falla (app sin instalar, clave errónea…), deja un
-warning y también usa `gitops-token`.
+solo `contents: write`, y se lo pasa a `deploy_apps.sh` como `GITOPS_TOKEN`. Si la generación
+falla (app sin instalar, clave errónea…), el despliegue falla. No hay plan B con un token personal
+(PAC-69).
 
 El commit `deploy(…)` lleva como autor a quien lanzó el workflow (`github.actor`, con su email
 noreply de GitHub a partir de `github.actor_id`) y como committer a quien autentica: la app o el
@@ -104,7 +103,7 @@ token.
 - `IS_BC`: Flag para despliegues BC
 - `USER_CHANGE`: Usuario que realizó el cambio
 - `USER_CHANGE_ID`: Id numérico de ese usuario (`github.actor_id`)
-- `GITOPS_TOKEN`: Token de instalación de la app o, si no hay app, `gitops-token`
+- `GITOPS_TOKEN`: Token de instalación de la app
 - `GITHUB_CONTEXT`: Contexto de GitHub (JSON)
 
 ## Secrets requeridos
@@ -125,8 +124,7 @@ token.
 
 ### GitOps (opcionales)
 
-- `GITOPS_DEPLOYER_APP_ID` y `GITOPS_DEPLOYER_PRIVATE_KEY` (preferidos)
-- `GITOPS_TOKEN` (plan B)
+- `GITOPS_DEPLOYER_APP_ID` y `GITOPS_DEPLOYER_PRIVATE_KEY`
 
 ## Gestión de errores
 
