@@ -21,6 +21,8 @@ Esta GitHub Action despliega aplicaciones en un cluster de Kubernetes. Utiliza l
     aws-region: ${{ secrets.AWS_CI_BUCKET_REGION }}
     s3-bucket: ${{ secrets.AWS_CI_BUCKET }}
     deploy_env: "production"
+    gitops-app-id: ${{ secrets.GITOPS_DEPLOYER_APP_ID }}
+    gitops-app-private-key: ${{ secrets.GITOPS_DEPLOYER_PRIVATE_KEY }}
 ```
 
 ## Inputs
@@ -41,6 +43,21 @@ Esta GitHub Action despliega aplicaciones en un cluster de Kubernetes. Utiliza l
 | `s3-bucket`             | Nombre del bucket S3 que contiene ci-scripts.zip   | ✅        |              |
 | `deploy_env`            | Entorno de despliegue                              | ❌        | `production` |
 | `is_bc`                 | Si es un despliegue BC (1 para true, 0 para false) | ❌        | `0`          |
+| `gitops-app-id`         | App ID de la GitHub App con escritura en gitops    | ❌        | `""`         |
+| `gitops-app-private-key`| Clave privada (PEM) de esa app                     | ❌        | `""`         |
+| `gitops-token`          | Token con escritura en gitops (plan B)             | ❌        | `""`         |
+
+## Credenciales de gitops
+
+Si llegan `gitops-app-id` y `gitops-app-private-key`, la action genera en cada ejecución un token
+de instalación de la app con `actions/create-github-app-token`, acotado a `traventia-gitops` y con
+solo `contents: write`, y se lo pasa a `deploy_apps.sh` como `GITOPS_TOKEN`. Si falta alguno, usa
+`gitops-token`, como antes. Si la generación falla (app sin instalar, clave errónea…), deja un
+warning y también usa `gitops-token`.
+
+El commit `deploy(…)` lleva como autor a quien lanzó el workflow (`github.actor`, con su email
+noreply de GitHub a partir de `github.actor_id`) y como committer a quien autentica: la app o el
+token.
 
 ## Funcionamiento
 
@@ -86,6 +103,8 @@ Esta GitHub Action despliega aplicaciones en un cluster de Kubernetes. Utiliza l
 - `DEPLOY_ENV`: Entorno de despliegue
 - `IS_BC`: Flag para despliegues BC
 - `USER_CHANGE`: Usuario que realizó el cambio
+- `USER_CHANGE_ID`: Id numérico de ese usuario (`github.actor_id`)
+- `GITOPS_TOKEN`: Token de instalación de la app o, si no hay app, `gitops-token`
 - `GITHUB_CONTEXT`: Contexto de GitHub (JSON)
 
 ## Secrets requeridos
@@ -103,6 +122,11 @@ Esta GitHub Action despliega aplicaciones en un cluster de Kubernetes. Utiliza l
 - `EKS_I2_CA`
 - `EKS_I2_URL`
 - `EKS_I2_USER_NAME`
+
+### GitOps (opcionales)
+
+- `GITOPS_DEPLOYER_APP_ID` y `GITOPS_DEPLOYER_PRIVATE_KEY` (preferidos)
+- `GITOPS_TOKEN` (plan B)
 
 ## Gestión de errores
 

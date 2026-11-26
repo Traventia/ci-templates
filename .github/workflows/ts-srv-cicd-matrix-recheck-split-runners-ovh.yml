@@ -146,6 +146,10 @@ on:
         required: false
       GITOPS_TOKEN:
         required: false
+      GITOPS_DEPLOYER_APP_ID:
+        required: false
+      GITOPS_DEPLOYER_PRIVATE_KEY:
+        required: false
     outputs:
       apps_to_deploy:
         description: "Comma-separated list of applications that will be deployed"
@@ -450,6 +454,8 @@ jobs:
           apolo-api-token: ${{ secrets.APOLO_API_TOKEN }}
           branch: ${{ github.head_ref || github.ref_name }}
           gitops-token: ${{ secrets.GITOPS_TOKEN }}
+          gitops-app-id: ${{ secrets.GITOPS_DEPLOYER_APP_ID }}
+          gitops-app-private-key: ${{ secrets.GITOPS_DEPLOYER_PRIVATE_KEY }}
           overlay_cluster: ${{ inputs.overlay_cluster }}
 
   finalize-no-deploy:

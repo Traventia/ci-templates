@@ -71,6 +71,20 @@ jobs:
 | `EKS_I2_URL`        | URL del servidor de Kubernetes  |
 | `EKS_I2_USER_NAME`  | Nombre de usuario de Kubernetes |
 
+### GitOps (Opcionales - escritura en traventia-gitops)
+
+Las tres plantillas que despliegan (`ts-srv-cicd.yml`, `ts-srv-cicd-matrix-recheck.yml` y
+`ts-srv-cicd-matrix-recheck-split-runners-ovh.yml`) los reenvían a la action `deploy-to-k8s`.
+
+| Secret                        | Descripción                                                                   |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| `GITOPS_DEPLOYER_APP_ID`      | App ID de la GitHub App de despliegue en gitops                               |
+| `GITOPS_DEPLOYER_PRIVATE_KEY` | Clave privada (PEM) de esa app                                                |
+| `GITOPS_TOKEN`                | Token con escritura en gitops. Plan B: solo se usa si no llegan los dos de la app |
+
+Con la app, el commit `deploy(…)` sale con el bot de la app como committer y con quien lanzó el
+workflow como autor.
+
 ## Outputs
 
 | Output           | Descripción                                                    |
