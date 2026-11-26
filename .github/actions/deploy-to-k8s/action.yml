@@ -58,12 +58,8 @@ inputs:
     description: "Git branch name for branch-aware deployment tracking"
     required: false
     default: ""
-  gitops-token:
-    description: "GitHub token with write access to traventia-gitops repo (for ArgoCD deployments)"
-    required: false
-    default: ""
   gitops-app-id:
-    description: "App ID of the GitHub App with write access to traventia-gitops. With gitops-app-private-key, it takes precedence over gitops-token"
+    description: "App ID of the GitHub App with write access to traventia-gitops. Needed, with gitops-app-private-key, for ArgoCD (GitOps) deployments"
     required: false
     default: ""
   gitops-app-private-key:
@@ -113,12 +109,10 @@ runs:
         sudo mv kubectl /usr/local/bin/
 
     # Token de instalación de la app, acotado a traventia-gitops y con solo Contents: write.
-    # Sin las dos credenciales de la app, o si no se puede generar el token, se usa gitops-token
-    # (plan B), para que una app mal configurada no corte los despliegues.
+    # Si no se puede generar, el despliegue falla: no hay plan B con un token personal (PAC-69).
     - name: Create GitOps app token
       id: gitops-app-token
       if: ${{ inputs.gitops-app-id != '' && inputs.gitops-app-private-key != '' }}
-      continue-on-error: true
       uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
       with:
         app-id: ${{ inputs.gitops-app-id }}
@@ -126,11 +120,6 @@ runs:
         owner: Traventia
         repositories: traventia-gitops
         permission-contents: write
-
-    - name: Warn on GitOps app token fallback
-      if: ${{ steps.gitops-app-token.outcome == 'failure' }}
-      shell: bash
-      run: echo "::warning::Could not create the GitOps app token; falling back to gitops-token."
 
     - name: Deploy to cluster
       shell: bash
@@ -152,7 +141,7 @@ runs:
         GITHUB_CONTEXT: ${{ toJson(github) }}
         APOLO_API_TOKEN: ${{ inputs.apolo-api-token }}
         DEPLOY_BRANCH: ${{ inputs.branch }}
-        GITOPS_TOKEN: ${{ steps.gitops-app-token.outputs.token || inputs.gitops-token }}
+        GITOPS_TOKEN: ${{ steps.gitops-app-token.outputs.token }}
       run: |
         echo "Starting deployment process..."
         bash deploy_apps.sh ${{ inputs.apps }}
