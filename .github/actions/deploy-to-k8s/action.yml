@@ -62,6 +62,14 @@ inputs:
     description: "GitHub token with write access to traventia-gitops repo (for ArgoCD deployments)"
     required: false
     default: ""
+  gitops-app-id:
+    description: "App ID of the GitHub App with write access to traventia-gitops. With gitops-app-private-key, it takes precedence over gitops-token"
+    required: false
+    default: ""
+  gitops-app-private-key:
+    description: "Private key (PEM) of the GitHub App with write access to traventia-gitops"
+    required: false
+    default: ""
   overlay_cluster:
     description: "Target GitOps cluster (selects apps/<app>/overlays/<cluster>/<env>). Defaults to eks-i2 (production)."
     required: false
@@ -104,6 +112,26 @@ runs:
         chmod +x kubectl
         sudo mv kubectl /usr/local/bin/
 
+    # Token de instalación de la app, acotado a traventia-gitops y con solo Contents: write.
+    # Sin las dos credenciales de la app, o si no se puede generar el token, se usa gitops-token
+    # (plan B), para que una app mal configurada no corte los despliegues.
+    - name: Create GitOps app token
+      id: gitops-app-token
+      if: ${{ inputs.gitops-app-id != '' && inputs.gitops-app-private-key != '' }}
+      continue-on-error: true
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+      with:
+        app-id: ${{ inputs.gitops-app-id }}
+        private-key: ${{ inputs.gitops-app-private-key }}
+        owner: Traventia
+        repositories: traventia-gitops
+        permission-contents: write
+
+    - name: Warn on GitOps app token fallback
+      if: ${{ steps.gitops-app-token.outcome == 'failure' }}
+      shell: bash
+      run: echo "::warning::Could not create the GitOps app token; falling back to gitops-token."
+
     - name: Deploy to cluster
       shell: bash
       working-directory: ci/scripts
@@ -120,10 +148,11 @@ runs:
         DEPLOY_CLUSTER: ${{ inputs.overlay_cluster }}
         IS_BC: ${{ inputs.is_bc }}
         USER_CHANGE: ${{ github.actor }}
+        USER_CHANGE_ID: ${{ github.actor_id }}
         GITHUB_CONTEXT: ${{ toJson(github) }}
         APOLO_API_TOKEN: ${{ inputs.apolo-api-token }}
         DEPLOY_BRANCH: ${{ inputs.branch }}
-        GITOPS_TOKEN: ${{ inputs.gitops-token }}
+        GITOPS_TOKEN: ${{ steps.gitops-app-token.outputs.token || inputs.gitops-token }}
       run: |
         echo "Starting deployment process..."
         bash deploy_apps.sh ${{ inputs.apps }}
